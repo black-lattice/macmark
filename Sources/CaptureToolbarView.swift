@@ -6,7 +6,6 @@ final class CaptureToolbarView: NSView {
     private let bar = CaptureSurfaceView()
     let palette: CapturePaletteView
     private var tools: [MarkTool: NSButton] = [:]
-    private var settingsButton: NSButton!
     private var barWidth: CGFloat = 0
     private var dragPoint: CGPoint?
     var onLayoutChange: (() -> Void)?
@@ -31,8 +30,6 @@ final class CaptureToolbarView: NSView {
             tools[tool] = button
         }
         divider(at: &x)
-        settingsButton = CaptureIconButton.make("标注设置", icon: .settings, target: self, action: #selector(togglePalette), toggle: true)
-        place(settingsButton, at: &x)
         let undo = CaptureIconButton.make("撤销", icon: .undo, target: controller, action: #selector(EditorController.undoMark))
         undo.toolTip = "撤销（⌘Z）"; place(undo, at: &x)
         let redo = CaptureIconButton.make("重做", icon: .redo, target: controller, action: #selector(EditorController.redoMark))
@@ -72,7 +69,6 @@ final class CaptureToolbarView: NSView {
         let wasHidden = palette.isHidden
         for (key, button) in tools { button.state = key == tool ? .on : .off; button.needsDisplay = true }
         palette.isHidden = tool == .select
-        settingsButton.state = palette.isHidden ? .off : .on
         palette.update(tool: tool)
         needsLayout = true
         if wasHidden != palette.isHidden { onLayoutChange?() }
@@ -80,21 +76,12 @@ final class CaptureToolbarView: NSView {
     func selectionChanged() {
         let wasHidden = palette.isHidden
         if canvas.tool == .select { palette.isHidden = canvas.selectedMark == nil }
-        settingsButton.state = palette.isHidden ? .off : .on
         palette.update(tool: canvas.settingsTool)
         needsLayout = true
         if wasHidden != palette.isHidden { onLayoutChange?() }
     }
     @objc private func toolClicked(_ sender: NSButton) {
         if let id = sender.identifier?.rawValue, let tool = MarkTool(rawValue: id) { controller?.choose(tool) }
-    }
-    @objc private func togglePalette() {
-        canvas.commitText()
-        palette.isHidden.toggle()
-        settingsButton.state = palette.isHidden ? .off : .on
-        needsLayout = true
-        onLayoutChange?()
-        window?.makeFirstResponder(canvas)
     }
     @objc private func cancelCapture() { controller?.close() }
     override func hitTest(_ point: NSPoint) -> NSView? {

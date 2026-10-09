@@ -1,9 +1,9 @@
 import AppKit
 
 final class CanvasView: NSView {
-    let base: CGImage
-    let logicalSize: CGSize
-    private let image: NSImage
+    private(set) var base: CGImage
+    private(set) var logicalSize: CGSize
+    private var image: NSImage
     var tool: MarkTool = .arrow { didSet { commitText(); selectedID = nil; needsDisplay = true; refreshCursor(); onSelectionChange?() } }
     var markColor: NSColor = .systemRed
     var markWidth: CGFloat = 3
@@ -23,7 +23,7 @@ final class CanvasView: NSView {
     private var dragCursor: NSCursor?
     private var tracking: NSTrackingArea?
     private let history = UndoManager()
-    private let redactions: RedactionRenderer
+    private var redactions: RedactionRenderer
     var onToolKey: ((MarkTool) -> Void)?
     var onCancel: (() -> Void)?
     var onSelectionChange: (() -> Void)?
@@ -39,6 +39,7 @@ final class CanvasView: NSView {
         image = NSImage(cgImage: base, size: size)
         redactions = RedactionRenderer(base: base, logicalSize: size)
         super.init(frame: CGRect(origin: .zero, size: size))
+        clipsToBounds = true
         brushPreview.frame = bounds; brushPreview.autoresizingMask = [.width, .height]; addSubview(brushPreview)
         setAccessibilityLabel("截图标注画布。A 箭头，L 直线，P 画笔，R 方框，T 文字，B 高斯模糊，M 马赛克，V 选择。")
     }
@@ -254,6 +255,19 @@ final class CanvasView: NSView {
         guard let mark = textInput.commit(on: self) else { return }
         let old = marks; marks.append(mark); record(old); selectedID = mark.id
         needsDisplay = true; onSelectionChange?()
+    }
+    // Move annotations by the crop origin delta so they stay over the same screen pixels.
+    func updateCapture(base: CGImage, frame: CGRect) {
+        let offset = CGPoint(x: self.frame.minX - frame.minX, y: self.frame.minY - frame.minY)
+        for index in marks.indices { marks[index].move(by: offset) }
+        self.base = base
+        logicalSize = frame.size
+        image = NSImage(cgImage: base, size: frame.size)
+        redactions = RedactionRenderer(base: base, logicalSize: frame.size)
+        self.frame = frame
+        brushPreview.update(center: nil, diameter: 0)
+        needsDisplay = true
+        refreshCursor(); onSelectionChange?()
     }
     func renderedImage() -> CGImage? { commitText(); return Renderer.image(base: base, logicalSize: logicalSize, marks: marks) }
 }

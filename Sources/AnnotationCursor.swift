@@ -4,6 +4,9 @@ enum AnnotationCursor {
     static let brush = NSCursor(image: NSImage(size: CGSize(width: 1, height: 1), flipped: false) { _ in true }, hotSpot: .zero)
     private static let risingDiagonal = diagonal(rising: true)
     private static let fallingDiagonal = diagonal(rising: false)
+    static func resize(corner: Int) -> NSCursor {
+        corner % 2 == 0 ? fallingDiagonal : risingDiagonal
+    }
     static func resize(mark: Annotation, handle: Int) -> NSCursor {
         let points = mark.editingHandles
         guard points.indices.contains(handle) else { return .crosshair }

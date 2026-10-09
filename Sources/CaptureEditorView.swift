@@ -8,7 +8,11 @@ struct CaptureEditingContext {
 
 final class CaptureEditorView: NSView {
     private let snapshot: NSImage
-    private let selection: CGRect
+    private let source: CGImage
+    private let screenSize: CGSize
+    private let canvas: CanvasView
+    private(set) var selection: CGRect
+    private var resizeDrag: (corner: Int, selection: CGRect, start: CGPoint)?
     private let toolbar: CaptureToolbarView
     private let outline = CaptureOutlineView()
     var onCancel: (() -> Void)?
@@ -17,17 +21,23 @@ final class CaptureEditorView: NSView {
     init(context: CaptureEditingContext, canvas: CanvasView, toolbar: CaptureToolbarView) {
         let size = context.window.contentView?.bounds.size ?? context.window.frame.size
         snapshot = NSImage(cgImage: context.snapshot, size: size)
+        source = context.snapshot
+        screenSize = size
+        self.canvas = canvas
         selection = context.selection
         self.toolbar = toolbar
         super.init(frame: CGRect(origin: .zero, size: size))
-        setAccessibilityLabel("截图原位标注，Escape 或右键取消")
+        setAccessibilityLabel("截图原位标注，拖动选区四角调整大小，Escape 或右键取消")
         canvas.frame = selection
         addSubview(canvas)
         outline.frame = bounds
         outline.selection = selection
         outline.pixelSize = CGSize(width: canvas.base.width, height: canvas.base.height)
         addSubview(outline)
-        addSubview(toolbar)
+        outline.onDragStart = { [weak self] corner, point in self?.beginResize(corner: corner, at: point) }
+        outline.onDrag = { [weak self] point in self?.resize(to: point) }
+        outline.onDragEnd = { [weak self] point in self?.endResize(at: point) }
+        addSubview(toolbar, positioned: .below, relativeTo: outline)
         toolbar.onLayoutChange = { [weak self] in
             self?.needsLayout = true
             self?.layoutSubtreeIfNeeded()
@@ -50,9 +60,51 @@ final class CaptureEditorView: NSView {
     }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func mouseDown(with event: NSEvent) {
-        if let canvas = subviews.first as? CanvasView {
-            canvas.commitText()
-            window?.makeFirstResponder(canvas)
+        canvas.commitText()
+        window?.makeFirstResponder(canvas)
+    }
+    private func beginResize(corner: Int, at point: CGPoint) {
+        canvas.commitText()
+        window?.makeFirstResponder(canvas)
+        resizeDrag = (corner, selection, point)
+    }
+    private func resize(to point: CGPoint) {
+        guard let drag = resizeDrag else { return }
+        let corners = CaptureSelectionStyle.corners(of: drag.selection)
+        let corner = corners[drag.corner]
+        let anchor = corners[(drag.corner + 2) % 4]
+        let proposed = CGPoint(x: corner.x + point.x - drag.start.x, y: corner.y + point.y - drag.start.y)
+        // Keep the opposite corner fixed and a usable minimum of two screen points.
+        let end = CGPoint(x: corner.x < anchor.x ? max(0, min(anchor.x - 2, proposed.x)) : min(screenSize.width, max(anchor.x + 2, proposed.x)),
+                          y: corner.y < anchor.y ? max(0, min(anchor.y - 2, proposed.y)) : min(screenSize.height, max(anchor.y + 2, proposed.y)))
+        applySelection(Geometry.rect(from: anchor, to: end))
+    }
+    private func endResize(at point: CGPoint) {
+        guard let drag = resizeDrag else { return }
+        resize(to: point)
+        resizeDrag = nil
+        if selection != drag.selection { recordSelection(drag.selection) }
+        window?.makeFirstResponder(canvas)
+    }
+    private func applySelection(_ rect: CGRect) {
+        guard rect != selection else { return }
+        let pixels = Geometry.cropRect(selection: rect, screenSize: screenSize,
+                                       imageSize: CGSize(width: source.width, height: source.height))
+        guard let cropped = source.cropping(to: pixels) else { return }
+        selection = rect
+        outline.selection = rect
+        outline.pixelSize = pixels.size
+        canvas.updateCapture(base: cropped, frame: rect)
+        needsDisplay = true; needsLayout = true
+        layoutSubtreeIfNeeded()
+        window?.invalidateCursorRects(for: outline)
+    }
+    private func recordSelection(_ old: CGRect) {
+        canvas.undoManager?.registerUndo(withTarget: canvas) { [weak self] _ in
+            guard let self else { return }
+            let current = self.selection
+            self.applySelection(old)
+            self.recordSelection(current)
         }
     }
     override func rightMouseDown(with event: NSEvent) { onCancel?() }
@@ -99,6 +151,10 @@ final class CaptureEditorView: NSView {
 
 enum CaptureSelectionStyle {
     static let blue = NSColor(calibratedRed: 0.22, green: 0.64, blue: 1, alpha: 1)
+    static func corners(of selection: CGRect) -> [CGPoint] {
+        [CGPoint(x: selection.minX, y: selection.minY), CGPoint(x: selection.maxX, y: selection.minY),
+         CGPoint(x: selection.maxX, y: selection.maxY), CGPoint(x: selection.minX, y: selection.maxY)]
+    }
     static func labelFrame(selection: CGRect, pixelSize: CGSize, within bounds: CGRect, below: Bool = false) -> CGRect {
         let text = "\(Int(pixelSize.width)) × \(Int(pixelSize.height))"
         let size = (text as NSString).size(withAttributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)])
@@ -111,16 +167,16 @@ enum CaptureSelectionStyle {
         let border = NSBezierPath(rect: selection.insetBy(dx: -0.5, dy: -0.5))
         border.lineWidth = 1
         border.stroke()
-        // Corner brackets mark the boundary without implying draggable resize handles.
-        let corners = NSBezierPath()
+        let brackets = NSBezierPath()
+        let cornerLength: CGFloat = 11
         for (x, dx) in [(selection.minX, CGFloat(1)), (selection.maxX, CGFloat(-1))] {
             for (y, dy) in [(selection.minY, CGFloat(1)), (selection.maxY, CGFloat(-1))] {
-                corners.move(to: CGPoint(x: x + dx * 7, y: y))
-                corners.line(to: CGPoint(x: x, y: y))
-                corners.line(to: CGPoint(x: x, y: y + dy * 7))
+                brackets.move(to: CGPoint(x: x + dx * cornerLength, y: y))
+                brackets.line(to: CGPoint(x: x, y: y))
+                brackets.line(to: CGPoint(x: x, y: y + dy * cornerLength))
             }
         }
-        corners.lineWidth = 2; corners.stroke()
+        brackets.lineWidth = 2.5; brackets.stroke()
         let text = "\(Int(pixelSize.width)) × \(Int(pixelSize.height))"
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
                                                        .foregroundColor: NSColor.white]
@@ -135,8 +191,46 @@ private final class CaptureOutlineView: NSView {
     var selection = CGRect.zero
     var pixelSize = CGSize.zero
     var labelBelow = false
+    var onDragStart: ((Int, CGPoint) -> Void)?
+    var onDrag: ((CGPoint) -> Void)?
+    var onDragEnd: ((CGPoint) -> Void)?
+    private var draggedCorner: Int?
     override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    private func handleRect(at point: CGPoint) -> CGRect {
+        CGRect(x: point.x - 8, y: point.y - 8, width: 16, height: 16).intersection(bounds)
+    }
+    private func corner(at point: CGPoint) -> Int? {
+        let corners = CaptureSelectionStyle.corners(of: selection)
+        return corners.indices.filter { handleRect(at: corners[$0]).contains(point) }.min {
+            hypot(corners[$0].x - point.x, corners[$0].y - point.y) < hypot(corners[$1].x - point.x, corners[$1].y - point.y)
+        }
+    }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        corner(at: convert(point, from: superview)) == nil ? nil : self
+    }
+    override func resetCursorRects() {
+        for (index, point) in CaptureSelectionStyle.corners(of: selection).enumerated() {
+            addCursorRect(handleRect(at: point), cursor: AnnotationCursor.resize(corner: index))
+        }
+    }
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let corner = corner(at: point) else { return }
+        draggedCorner = corner
+        AnnotationCursor.resize(corner: corner).set()
+        onDragStart?(corner, point)
+    }
+    override func mouseDragged(with event: NSEvent) {
+        guard let corner = draggedCorner else { return }
+        onDrag?(convert(event.locationInWindow, from: nil))
+        AnnotationCursor.resize(corner: corner).set()
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard draggedCorner != nil else { return }
+        onDragEnd?(convert(event.locationInWindow, from: nil))
+        draggedCorner = nil
+    }
+    override func rightMouseDown(with event: NSEvent) { superview?.rightMouseDown(with: event) }
     override func draw(_ dirtyRect: NSRect) {
         CaptureSelectionStyle.draw(selection: selection, pixelSize: pixelSize, within: bounds, labelBelow: labelBelow)
     }

@@ -82,15 +82,9 @@ extension Tests {
             NSApp.sendAction(mode.action!, to: mode.target, from: mode)
             expect(canvas.redactionMode == .region && brush.isHidden, "\(tool.title)保留原有框选方式")
         }
-        editor.choose(.arrow)
-        let settings = buttons.first { $0.title == "标注设置" }!
-        settings.performClick(nil)
-        expect(toolbar.palette.isHidden, "标注设置按钮可收起小面板")
-        expect(toolbar.frame.height == 40 && toolbar.frame.midX == selection.midX, "收起面板后重新计算居中位置及所需空间")
-        settings.performClick(nil)
-        expect(!toolbar.palette.isHidden, "标注设置按钮可展开小面板")
         buttons.first { $0.identifier?.rawValue == MarkTool.select.rawValue }!.performClick(nil)
         expect(toolbar.palette.isHidden, "选择工具收起颜色与粗细面板")
+        expect(toolbar.frame.height == 40 && toolbar.frame.midX == selection.midX, "收起面板后重新计算居中位置及所需空间")
         buttons.first { $0.identifier?.rawValue == MarkTool.arrow.rawValue }!.performClick(nil)
         expect(!toolbar.palette.isHidden, "绘图工具显示对应设置面板")
         changeSize(5)

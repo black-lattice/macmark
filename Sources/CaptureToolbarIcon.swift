@@ -2,7 +2,7 @@ import AppKit
 
 // A shared 20-point grid and rounded strokes keep all capture actions visually consistent.
 enum CaptureToolbarIcon {
-    case rectangle, line, arrow, pen, text, blur, mosaic, select, settings, undo, redo, cancel, pin, save, copy
+    case rectangle, line, arrow, pen, text, blur, mosaic, select, undo, redo, cancel, pin, save, copy
     static func forTool(_ tool: MarkTool) -> CaptureToolbarIcon {
         switch tool {
         case .rectangle: return .rectangle
@@ -50,8 +50,6 @@ enum CaptureToolbarIcon {
                 for x in [CGFloat(3), 8, 13] {
                     for y in [CGFloat(3), 8, 13] { path.appendRect(CGRect(x: x, y: y, width: 3, height: 3)) }
                 }
-            case .settings:
-                for y in [CGFloat(5), 10, 15] { points([(3, y), (17, y)]) }
             case .undo:
                 path.move(to: CGPoint(x: 16, y: 4))
                 path.curve(to: CGPoint(x: 5, y: 14), controlPoint1: CGPoint(x: 19, y: 13), controlPoint2: CGPoint(x: 12, y: 16))
@@ -74,13 +72,6 @@ enum CaptureToolbarIcon {
             color.setStroke()
             path.lineWidth = 1.7; path.lineCapStyle = .round; path.lineJoinStyle = .round
             path.stroke()
-            if case .settings = self {
-                for (x, y) in [(CGFloat(7), CGFloat(15)), (13, 10), (8, 5)] {
-                    let knob = NSBezierPath(ovalIn: CGRect(x: x - 2, y: y - 2, width: 4, height: 4))
-                    NSColor.white.setFill(); knob.fill()
-                    color.setStroke(); knob.lineWidth = 1.5; knob.stroke()
-                }
-            }
             return true
         }
     }

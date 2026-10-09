@@ -44,5 +44,10 @@ extension Tests {
         }
         editor.close()
         try captureEditing(snapshot: base, size: size)
+        try captureResizing(snapshot: base, size: size)
+        let standard = CGContext(data: nil, width: Int(size.width), height: Int(size.height), bitsPerComponent: 8, bytesPerRow: 0,
+                                 space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        standard.draw(base, in: CGRect(origin: .zero, size: size))
+        try captureResizing(snapshot: standard.makeImage()!, size: size)
     }
 }
