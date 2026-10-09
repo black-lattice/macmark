@@ -76,6 +76,8 @@ GitHub Actions 会附带短时间空闲 CPU / RSS 样本，仅用于发现明显
 xcrun swiftc -typecheck -parse-as-library -swift-version 5 -target "$(uname -m)-apple-macos14.0" Sources/*.swift
 # 运行真实几何、渲染和编辑历史测试
 scripts/test.sh
+# 在真实桌面额外验证锚定截图的鼠标双击文字选择
+MACMARK_INTERACTIVE_TESTS=1 scripts/test.sh
 # 显式构建 Universal .app
 VERSION=0.1.4 scripts/build.sh
 # 打包 DMG / ZIP
@@ -110,4 +112,5 @@ git push origin v0.1.4
 导出像素尺寸与方向、PNG 编解码，以及绘制/删除/移动的撤销重做。
 原位编辑检查覆盖工具栏边缘布局、窗口与选区位置、工具切换、绘制坐标、撤销重做、导出尺寸及 Esc 清理。
 CI 启动检查确认菜单栏进程能存活；它不能代替人工检查系统权限、快捷键或选区交互。
+实况文本识别、系统文字选区与复制在 CI 中验证；模拟鼠标双击需要交互桌面，使用 `MACMARK_INTERACTIVE_TESTS=1` 在本地额外检查。
 发布前后仍需在真实 Mac 上检查屏幕授权、多显示器、不同缩放比例和日常截图流程。
