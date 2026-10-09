@@ -49,10 +49,13 @@ enum Tests {
         expect(NSBitmapImageRep(data: png)?.pixelsWide == 200, "PNG 编码解码")
         try png.write(to: URL(fileURLWithPath: ".build/annotation-preview.png"))
         let canvas = CanvasView(base: base, size: size)
+        let testWindow = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless,
+                                  backing: .buffered, defer: false)
+        testWindow.contentView = canvas
         canvas.tool = .line
         func event(_ type: NSEvent.EventType, x: CGFloat, y: CGFloat) -> NSEvent {
-            NSEvent.mouseEvent(with: type, location: CGPoint(x: x, y: y), modifierFlags: [], timestamp: 0,
-                              windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            NSEvent.mouseEvent(with: type, location: canvas.convert(CGPoint(x: x, y: y), to: nil), modifierFlags: [], timestamp: 0,
+                              windowNumber: testWindow.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
         }
         canvas.mouseDown(with: event(.leftMouseDown, x: 10, y: 10))
         canvas.mouseDragged(with: event(.leftMouseDragged, x: 80, y: 50))
