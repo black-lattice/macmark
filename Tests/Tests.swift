@@ -75,6 +75,7 @@ enum Tests {
         expect(canvas.marks[0].points[0] == CGPoint(x: 20, y: 20), "拖动标注")
         canvas.undo()
         expect(canvas.marks[0].points[0] == CGPoint(x: 10, y: 10), "撤销移动")
+        try preview()
         print("通过 \(checks) 项检查，架构：\(ProcessInfo.processInfo.environment["RUNNER_ARCH"] ?? "local")")
     }
 }

@@ -16,6 +16,8 @@ lipo -create .build/MacMark-arm64 .build/MacMark-x86_64 -output "$APP/Contents/M
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${BUILD_NUMBER:-1}" "$APP/Contents/Info.plist"
+swift scripts/Icon.swift .build/AppIcon.iconset
+iconutil -c icns .build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
 # Ad-hoc signing makes the arm64 executable valid. This is not Developer ID signing.
 codesign --force --sign - --identifier io.github.black-lattice.macmark "$APP"
 codesign --verify --deep --strict "$APP"
