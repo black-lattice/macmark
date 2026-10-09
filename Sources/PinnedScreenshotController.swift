@@ -58,6 +58,14 @@ final class PinnedScreenshotController: NSWindowController, NSWindowDelegate {
 
 final class PinnedScreenshotWindow: NSPanel {
     override var canBecomeKey: Bool { true }
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown, let view = contentView as? PinnedScreenshotView {
+            let point = view.convert(event.locationInWindow, from: nil)
+            // A nonactivating panel must receive keyboard focus before Live Text handles its first click.
+            if view.textOverlay.hasText(at: point) { makeKey() }
+        }
+        super.sendEvent(event)
+    }
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "c",

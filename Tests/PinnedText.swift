@@ -10,6 +10,9 @@ import VisionKit
 
 extension Tests {
     @MainActor static func pinnedTextWithRunLoop() throws {
+        let originalPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.accessory)
+        defer { NSApp.setActivationPolicy(originalPolicy) }
         var finished = false
         var failure: Error?
         let task = Task { @MainActor in
@@ -54,10 +57,10 @@ extension Tests {
                               windowNumber: panel.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
         }
         func menu() -> NSMenu { view.menu(for: event(.rightMouseDown, at: CGPoint(x: 550, y: 200)))! }
-        func waitUntil(_ condition: () -> Bool) async {
+        func waitUntil(_ message: String = "异步文字识别状态及时更新", _ condition: () -> Bool) async {
             let deadline = Date(timeIntervalSinceNow: 5)
             while !condition() && Date() < deadline { await Task.yield() }
-            expect(condition(), "异步文字识别状态及时更新")
+            expect(condition(), message)
         }
         await waitUntil { source.requests.count == 1 }
         expect(view.recognitionState == .recognizing && menu().item(withTitle: "正在识别文字…") != nil
@@ -137,7 +140,7 @@ extension Tests {
                                                clickCount: 2, pressure: 1)!
                 native.window!.sendEvent(click)
             }
-            await waitUntil { !nativeView.selectedText.isEmpty }
+            await waitUntil("双击文字后形成系统文字选区") { !nativeView.selectedText.isEmpty }
             expect(native.window!.isKeyWindow, "直接点击文字可在非激活锚定窗口中选择并接收复制快捷键")
             let text = overlay.text
             let start = text.range(of: "Hello")!.lowerBound
