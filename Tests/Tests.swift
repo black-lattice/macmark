@@ -88,6 +88,7 @@ enum Tests {
         try textAppearance()
         try selectionBorders(base: base)
         try pinnedScreenshots(base: base)
+        try pinnedTextWithRunLoop()
         try preview()
         print("通过 \(checks) 项检查，架构：\(ProcessInfo.processInfo.environment["RUNNER_ARCH"] ?? "local")")
     }

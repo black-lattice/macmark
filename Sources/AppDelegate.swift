@@ -119,7 +119,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func saveCurrent() { current?.saveImage() }
     @objc private func closeCurrent() { current?.close() }
     @objc private func copyCurrent() {
-        if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
+        if let pinned = NSApp.keyWindow?.windowController as? PinnedScreenshotController { pinned.copySelectedText() }
+        else if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
         else { current?.copyImage() }
     }
     @objc private func undoCurrent() {

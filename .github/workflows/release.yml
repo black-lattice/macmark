@@ -43,7 +43,7 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_ENV"
           else
-            echo "VERSION=0.1.3" >> "$GITHUB_ENV"
+            echo "VERSION=0.1.4" >> "$GITHUB_ENV"
           fi
           echo "BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
       - name: 双架构编译、签名和验证

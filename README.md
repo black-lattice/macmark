@@ -27,7 +27,9 @@
 设置面板随当前工具和选中的标注自动显示：绘图工具显示颜色与粗细，文字工具显示字号；选择工具未选中标注时收起面板。
 可拖动工具栏空白处避开要标注的内容；复制或保存成功后结束本次截图，取消保存可继续编辑。
 点击「锚定截图」可将当前截图（含标注和遮挡效果）固定在其他普通窗口上方，并结束当前截图编辑。
-锚定图片没有边框，使用系统窗口阴影；可同时锚定多张截图，拖动图片可移动位置；在某张图片上右键选择「销毁锚定截图」只关闭该张图片。再次截图时会包含锚定图片。
+锚定图片没有边框，使用系统窗口阴影；可同时锚定多张截图，拖动空白区域可移动位置；在某张图片上右键选择「销毁锚定截图」只关闭该张图片。再次截图时会包含锚定图片。
+锚定后自动在本地识别文字，支持的设备可直接选中文字，按 ⌘C 或右键复制；拖动空白区域仍可移动图片。
+右键「复制全部文字」可复制整张截图中的识别结果；不支持实况文本的设备使用普通 OCR，仍可复制全部文字。识别期间与未识别到文字时会显示状态，失败可重试。
 
 | 工具或操作 | 快捷键 |
 | --- | --- |
@@ -75,9 +77,9 @@ xcrun swiftc -typecheck -parse-as-library -swift-version 5 -target "$(uname -m)-
 # 运行真实几何、渲染和编辑历史测试
 scripts/test.sh
 # 显式构建 Universal .app
-VERSION=0.1.3 scripts/build.sh
+VERSION=0.1.4 scripts/build.sh
 # 打包 DMG / ZIP
-VERSION=0.1.3 scripts/package.sh
+VERSION=0.1.4 scripts/package.sh
 # 本地启动
 open dist/MacMark.app
 ```
@@ -91,8 +93,8 @@ open dist/MacMark.app
 推送 `vX.Y.Z` 标签：同样测试和构建，再自动发布 GitHub Release，附带 DMG、ZIP、SHA256 和空闲采样。
 
 ```sh
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 流水线未导入任何 Apple 私钥。正式无拦截分发需后续配置 Developer ID Application 签名和 Apple 公证。
