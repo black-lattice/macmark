@@ -6,7 +6,7 @@ enum Tests {
     static func expect(_ condition: @autoclosure () -> Bool, _ message: String) {
         checks += 1
         guard condition() else { fatalError("FAIL: \(message)") }
-        print("PASS: \(message)")
+        print("PASS: \(message)"); fflush(stdout)
     }
     @MainActor static func main() throws {
         _ = NSApplication.shared
@@ -41,8 +41,8 @@ enum Tests {
         let rep = NSBitmapImageRep(cgImage: exported)
         let pixel = rep.colorAt(x: 100, y: 50)!.usingColorSpace(.deviceRGB)!
         expect(pixel.redComponent > 0.9 && pixel.greenComponent < 0.2, "导出直线位置及颜色正确")
-        let upper = rep.colorAt(x: 20, y: 20)!.usingColorSpace(.deviceRGB)!
-        let lower = rep.colorAt(x: 20, y: 180)!.usingColorSpace(.deviceRGB)!
+        let upper = rep.colorAt(x: 10, y: 10)!.usingColorSpace(.deviceRGB)!
+        let lower = rep.colorAt(x: 10, y: 190)!.usingColorSpace(.deviceRGB)!
         expect(upper.greenComponent > 0.9 && upper.redComponent < 0.2, "底图顶部方向正确")
         expect(lower.redComponent > 0.9, "底图底部方向正确")
         let png = Renderer.png(exported)!
