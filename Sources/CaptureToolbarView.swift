@@ -23,7 +23,7 @@ final class CaptureToolbarView: NSView {
         addSubview(bar); addSubview(palette)
         bar.toolTip = "拖动工具栏空白处可移动位置"
         var x: CGFloat = 18
-        for tool in [MarkTool.rectangle, .line, .arrow, .pen, .text, .select] {
+        for tool in [MarkTool.rectangle, .line, .arrow, .pen, .text, .blur, .mosaic, .select] {
             let button = CaptureIconButton.make(tool.title, icon: .forTool(tool), target: self, action: #selector(toolClicked(_:)), toggle: true)
             button.identifier = NSUserInterfaceItemIdentifier(tool.rawValue)
             button.toolTip = "\(tool.title)（\(tool.key.uppercased())）"
@@ -39,6 +39,9 @@ final class CaptureToolbarView: NSView {
         redo.toolTip = "重做（⇧⌘Z）"; place(redo, at: &x)
         divider(at: &x)
         place(CaptureIconButton.make("取消", icon: .cancel, target: self, action: #selector(cancelCapture)), at: &x)
+        let pin = CaptureIconButton.make("锚定截图", icon: .pin, target: controller, action: #selector(EditorController.pinImage))
+        pin.toolTip = "将截图锚定在屏幕最前，右键可销毁"
+        place(pin, at: &x)
         place(CaptureIconButton.make("保存 PNG", icon: .save, target: controller, action: #selector(EditorController.saveImage)), at: &x)
         let copy = CaptureIconButton.make("复制截图", icon: .copy, target: controller, action: #selector(EditorController.copyImage))
         copy.toolTip = "复制截图并完成（⌘C）"
@@ -61,7 +64,8 @@ final class CaptureToolbarView: NSView {
         super.layout()
         bar.frame = CGRect(x: 0, y: paletteAbove ? bounds.height - 40 : 0, width: bounds.width, height: 40)
         let anchor = tools[canvas.tool]?.frame.minX ?? 18
-        palette.frame = CGRect(x: min(anchor, max(0, bounds.width - 224)), y: paletteAbove ? 0 : 46, width: 224, height: 72)
+        let width = 224.0
+        palette.frame = CGRect(x: min(anchor, max(0, bounds.width - width)), y: paletteAbove ? 0 : 46, width: width, height: 72)
         window?.invalidateCursorRects(for: self)
     }
     func selectTool(_ tool: MarkTool) {
@@ -70,6 +74,14 @@ final class CaptureToolbarView: NSView {
         palette.isHidden = tool == .select
         settingsButton.state = palette.isHidden ? .off : .on
         palette.update(tool: tool)
+        needsLayout = true
+        if wasHidden != palette.isHidden { onLayoutChange?() }
+    }
+    func selectionChanged() {
+        let wasHidden = palette.isHidden
+        if canvas.tool == .select { palette.isHidden = canvas.selectedMark == nil }
+        settingsButton.state = palette.isHidden ? .off : .on
+        palette.update(tool: canvas.settingsTool)
         needsLayout = true
         if wasHidden != palette.isHidden { onLayoutChange?() }
     }
@@ -104,74 +116,6 @@ final class CaptureToolbarView: NSView {
     override func mouseUp(with event: NSEvent) { dragPoint = nil }
 }
 
-final class CapturePaletteView: CaptureSurfaceView {
-    private let canvas: CanvasView
-    private let caption = NSTextField(labelWithString: "粗细")
-    private var widthButtons: [NSButton] = []
-    private var colorButtons: [NSButton] = []
-    private let widths: [CGFloat] = [1.5, 3, 5]
-    private let colors: [(String, NSColor)] = [("红色", .systemRed), ("橙色", .systemOrange), ("黄色", .systemYellow),
-                                              ("绿色", .systemGreen), ("青色", .systemTeal), ("蓝色", .systemBlue),
-                                              ("紫色", .systemPurple), ("粉色", .systemPink), ("黑色", .black), ("白色", .white)]
-    init(canvas: CanvasView) {
-        self.canvas = canvas
-        super.init(frame: .zero)
-        label(caption, at: 10)
-        label(NSTextField(labelWithString: "颜色"), at: 112)
-        for (index, width) in widths.enumerated() {
-            let button = CaptureIconButton.make("线条粗细 \(width)", icon: nil, target: self, action: #selector(widthClicked(_:)), toggle: true)
-            button.tag = index
-            button.frame = CGRect(x: 8 + CGFloat(index) * 30, y: 28, width: 28, height: 32)
-            button.image = NSImage(size: CGSize(width: 16, height: 16), flipped: false) { rect in
-                NSColor.black.setFill()
-                NSBezierPath(ovalIn: CGRect(x: rect.midX - width, y: rect.midY - width, width: width * 2, height: width * 2)).fill()
-                return true
-            }
-            addSubview(button); widthButtons.append(button)
-        }
-        for (index, entry) in colors.enumerated() {
-            let button = CaptureIconButton.make(entry.0, icon: nil, target: self, action: #selector(colorClicked(_:)), toggle: true, swatch: true)
-            button.tag = index
-            button.frame = CGRect(x: 110 + CGFloat(index % 5) * 21, y: 25 + CGFloat(index / 5) * 22, width: 20, height: 20)
-            button.image = NSImage(size: CGSize(width: 14, height: 14), flipped: false) { rect in
-                let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
-                entry.1.setFill(); circle.fill()
-                NSColor.lightGray.setStroke(); circle.lineWidth = 0.5; circle.stroke()
-                return true
-            }
-            addSubview(button); colorButtons.append(button)
-        }
-        update(tool: canvas.tool)
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    private func label(_ field: NSTextField, at x: CGFloat) {
-        field.font = .systemFont(ofSize: 11)
-        field.textColor = .darkGray
-        field.frame = CGRect(x: x, y: 7, width: 90, height: 15)
-        addSubview(field)
-    }
-    func update(tool: MarkTool) {
-        caption.stringValue = tool == .text ? "字号" : "粗细"
-        for (index, button) in widthButtons.enumerated() {
-            button.title = tool == .text ? "\(Int(max(16, widths[index] * 6)))" : "线条粗细 \(widths[index])"
-            button.imagePosition = tool == .text ? .noImage : .imageOnly
-            button.toolTip = tool == .text ? "字号 \(button.title)" : button.title
-            button.setAccessibilityLabel(button.toolTip)
-            button.state = widths[index] == canvas.markWidth ? .on : .off
-            button.needsDisplay = true
-        }
-        for (index, button) in colorButtons.enumerated() { button.state = colors[index].1 == canvas.markColor ? .on : .off }
-    }
-    @objc private func widthClicked(_ sender: NSButton) {
-        canvas.commitText(); canvas.markWidth = widths[sender.tag]
-        update(tool: canvas.tool); window?.makeFirstResponder(canvas)
-    }
-    @objc private func colorClicked(_ sender: NSButton) {
-        canvas.commitText(); canvas.markColor = colors[sender.tag].1
-        update(tool: canvas.tool); window?.makeFirstResponder(canvas)
-    }
-}
-
 class CaptureSurfaceView: NSView {
     var showsGrip = false
     override var isFlipped: Bool { true }
@@ -188,7 +132,7 @@ class CaptureSurfaceView: NSView {
     }
 }
 
-private final class CaptureIconButton: NSButton {
+final class CaptureIconButton: NSButton {
     private static let normalColor = NSColor(calibratedRed: 0.31, green: 0.35, blue: 0.41, alpha: 1)
     private var icon: CaptureToolbarIcon?
     private var isSwatch = false

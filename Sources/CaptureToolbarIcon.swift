@@ -2,7 +2,7 @@ import AppKit
 
 // A shared 20-point grid and rounded strokes keep all capture actions visually consistent.
 enum CaptureToolbarIcon {
-    case rectangle, line, arrow, pen, text, select, settings, undo, redo, cancel, save, copy
+    case rectangle, line, arrow, pen, text, blur, mosaic, select, settings, undo, redo, cancel, pin, save, copy
     static func forTool(_ tool: MarkTool) -> CaptureToolbarIcon {
         switch tool {
         case .rectangle: return .rectangle
@@ -11,6 +11,8 @@ enum CaptureToolbarIcon {
         case .pen: return .pen
         case .text: return .text
         case .select: return .select
+        case .blur: return .blur
+        case .mosaic: return .mosaic
         }
     }
     func image(color: NSColor) -> NSImage {
@@ -39,6 +41,15 @@ enum CaptureToolbarIcon {
                 points([(7, 4), (13, 4)])
             case .select:
                 points([(4, 17), (4, 3), (8, 7), (12, 2), (15, 4), (11, 9), (17, 9), (4, 17)])
+            case .blur:
+                path.appendOval(in: CGRect(x: 3, y: 3, width: 14, height: 14))
+                for y in [CGFloat(6), 10, 14] {
+                    points([(7, y), (13, y)])
+                }
+            case .mosaic:
+                for x in [CGFloat(3), 8, 13] {
+                    for y in [CGFloat(3), 8, 13] { path.appendRect(CGRect(x: x, y: y, width: 3, height: 3)) }
+                }
             case .settings:
                 for y in [CGFloat(5), 10, 15] { points([(3, y), (17, y)]) }
             case .undo:
@@ -51,6 +62,9 @@ enum CaptureToolbarIcon {
                 points([(12, 18), (16, 14), (12, 10)])
             case .cancel:
                 points([(5, 5), (15, 15)]); points([(5, 15), (15, 5)])
+            case .pin:
+                points([(8, 17), (16, 9), (14, 7), (12, 9), (8, 7), (7, 8), (9, 12), (7, 14), (8, 17)])
+                points([(8, 8), (3, 3)])
             case .save:
                 points([(10, 17), (10, 7)]); points([(6, 11), (10, 7), (14, 11)])
                 points([(3, 7), (3, 3), (17, 3), (17, 7)])

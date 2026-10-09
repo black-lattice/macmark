@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shortcutSettings: ShortcutSettingsController?
     private let capture = CaptureCoordinator()
     private var editors: [EditorController] = []
+    private let pinnedScreenshots = PinnedScreenshotManager()
     private var loginItem: NSMenuItem!
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let existing = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
@@ -35,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.menu = menu
         capture.onCapture = { [weak self] image, size, context in self?.showEditor(image, size: size, captureContext: context) }
         capture.onError = { [weak self] message in self?.alert(message) }
+        capture.prepare()
         shortcut = HotKey { [weak self] in self?.takeScreenshot() }
         if shortcut?.register(captureShortcut) != true { showShortcutError() }
         if !UserDefaults.standard.bool(forKey: "didShowWelcome") {
@@ -142,6 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showEditor(_ image: CGImage, size: CGSize, captureContext: CaptureEditingContext? = nil) {
         let editor = EditorController(image: image, size: size, captureContext: captureContext)
         editors.append(editor)
+        editor.onPin = { [weak self] image, size, frame in
+            self?.pinnedScreenshots.pin(image: image, size: size, preferredFrame: frame)
+        }
         editor.onClose = { [weak self, weak editor] in
             self?.editors.removeAll { $0 === editor }
             if captureContext != nil { self?.capture.cancel() }

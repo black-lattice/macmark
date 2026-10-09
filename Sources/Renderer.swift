@@ -2,11 +2,16 @@ import AppKit
 
 enum Renderer {
     static func draw(_ mark: Annotation) {
+        guard !mark.tool.isRedaction else { return }
         guard let first = mark.points.first, let last = mark.points.last else { return }
         mark.color.setStroke()
         mark.color.setFill()
         if mark.tool == .text {
             (mark.text as NSString).draw(at: first, withAttributes: mark.textAttributes)
+            return
+        }
+        if mark.tool == .arrow {
+            mark.arrowPath.fill()
             return
         }
         let path = NSBezierPath()
@@ -19,24 +24,12 @@ enum Renderer {
         case .pen:
             path.move(to: first)
             for point in mark.points.dropFirst() { path.line(to: point) }
-        case .arrow, .line:
+        case .line:
             path.move(to: first)
             path.line(to: last)
         default: break
         }
         path.stroke()
-        if mark.tool == .arrow {
-            let angle = atan2(last.y - first.y, last.x - first.x)
-            let length = min(hypot(last.x - first.x, last.y - first.y) * 0.45, max(12, mark.width * 4))
-            let head = NSBezierPath()
-            head.move(to: last)
-            for delta in [-CGFloat.pi / 6, CGFloat.pi / 6] {
-                head.line(to: CGPoint(x: last.x - cos(angle + delta) * length,
-                                     y: last.y - sin(angle + delta) * length))
-            }
-            head.close()
-            head.fill()
-        }
     }
     static func image(base: CGImage, logicalSize: CGSize, marks: [Annotation]) -> CGImage? {
         guard let context = CGContext(data: nil, width: base.width, height: base.height,
@@ -49,7 +42,8 @@ enum Renderer {
                         y: -CGFloat(base.height) / logicalSize.height)
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
-        marks.forEach(draw)
+        RedactionRenderer(base: base, logicalSize: logicalSize).draw(marks)
+        marks.filter { !$0.tool.isRedaction }.forEach(draw)
         NSGraphicsContext.restoreGraphicsState()
         return context.makeImage()
     }

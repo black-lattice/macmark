@@ -34,6 +34,7 @@ enum Tests {
         ctx.setFillColor(NSColor.white.cgColor); ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
         ctx.setFillColor(NSColor.green.cgColor); ctx.fill(CGRect(x: 0, y: 160, width: 40, height: 40))
         let base = ctx.makeImage()!
+        try capturePreparationWithRunLoop(base: base)
         let size = CGSize(width: 100, height: 100)
         let line = Annotation(tool: .line, points: [CGPoint(x: 30, y: 25), CGPoint(x: 85, y: 25)], color: .red, width: 3)
         let text = Annotation(tool: .text, points: [CGPoint(x: 20, y: 60)], color: .black, width: 3, text: "轻截 MacMark")
@@ -79,6 +80,14 @@ enum Tests {
         expect(canvas.marks[0].points[0] == CGPoint(x: 20, y: 20), "拖动标注")
         canvas.undo()
         expect(canvas.marks[0].points[0] == CGPoint(x: 10, y: 10), "撤销移动")
+        try shapeEditing(base: base)
+        try arrowRendering()
+        try redactionRendering()
+        try redactionBrush(base: base)
+        try sizeSliders(base: base)
+        try textAppearance()
+        try selectionBorders(base: base)
+        try pinnedScreenshots(base: base)
         try preview()
         print("通过 \(checks) 项检查，架构：\(ProcessInfo.processInfo.environment["RUNNER_ARCH"] ?? "local")")
     }

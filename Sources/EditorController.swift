@@ -6,10 +6,15 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     private let scroll = NSScrollView()
     private var toolButtons: [MarkTool: NSButton] = [:]
     private var colorButtons: [NSButton] = []
+    private let colorCaption = NSTextField(labelWithString: "颜色")
+    private let widthSelector = AnnotationSizeSlider()
+    private let redactionModeSelector = NSSegmentedControl(labels: ["框选", "涂抹"], trackingMode: .selectOne, target: nil, action: nil)
+    private let brushSizeSelector = AnnotationSizeSlider()
     private var zoom: CGFloat = 1
     private let isCapture: Bool
     private var captureToolbar: CaptureToolbarView?
     var onClose: (() -> Void)?
+    var onPin: ((CGImage, CGSize, CGRect) -> Void)?
     init(image: CGImage, size: CGSize, captureContext: CaptureEditingContext? = nil) {
         canvas = CanvasView(base: image, size: size)
         isCapture = captureContext != nil
@@ -24,6 +29,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         window.delegate = self
         buildUI(captureContext: captureContext)
         canvas.onToolKey = { [weak self] tool in self?.choose(tool) }
+        canvas.onSelectionChange = { [weak self] in self?.captureToolbar?.selectionChanged(); self?.updateOptions() }
         if isCapture { canvas.onCancel = { [weak self] in self?.close() } }
         else { window.center() }
         window.makeKeyAndOrderFront(nil)
@@ -68,7 +74,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         tools.addArrangedSubview(redo)
         let options = NSStackView()
         options.spacing = 6
-        options.addArrangedSubview(NSTextField(labelWithString: "颜色"))
+        options.addArrangedSubview(colorCaption)
         let colors: [(String, NSColor)] = [("红色", .systemRed), ("橙色", .systemOrange),
                                           ("蓝色", .systemBlue), ("黑色", .black), ("白色", .white)]
         for (index, entry) in colors.enumerated() {
@@ -83,13 +89,16 @@ final class EditorController: NSWindowController, NSWindowDelegate {
             colorButtons.append(b)
             options.addArrangedSubview(b)
         }
-        options.addArrangedSubview(NSTextField(labelWithString: "粗细"))
-        let width = NSPopUpButton()
-        width.addItems(withTitles: ["细", "中", "粗"])
-        width.selectItem(at: 1)
-        width.target = self; width.action = #selector(widthChanged(_:))
-        width.setAccessibilityLabel("标注线条粗细")
+        let width = widthSelector
+        width.bindStyle(to: canvas); width.configureStyle(for: canvas)
         options.addArrangedSubview(width)
+        redactionModeSelector.target = self; redactionModeSelector.action = #selector(redactionModeChanged(_:))
+        redactionModeSelector.selectedSegment = canvas.redactionMode.rawValue
+        redactionModeSelector.isHidden = true; redactionModeSelector.setAccessibilityLabel("遮挡方式")
+        brushSizeSelector.bindBrush(to: canvas)
+        brushSizeSelector.configure(title: "笔刷", value: canvas.redactionBrushSize, range: 6...200, step: 1)
+        brushSizeSelector.isHidden = true
+        options.addArrangedSubview(redactionModeSelector); options.addArrangedSubview(brushSizeSelector)
         options.addArrangedSubview(NSView())
         options.addArrangedSubview(button("适应", symbol: "arrow.down.right.and.arrow.up.left", action: #selector(fit)))
         options.addArrangedSubview(button("100%", symbol: nil, action: #selector(actualSize)))
@@ -108,6 +117,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         hint.textColor = .secondaryLabelColor
         footer.addArrangedSubview(hint)
         footer.addArrangedSubview(NSView())
+        footer.addArrangedSubview(button("锚定截图", symbol: "pin", action: #selector(pinImage)))
         footer.addArrangedSubview(button("保存 PNG", symbol: "square.and.arrow.down", action: #selector(saveImage)))
         let copy = button("复制截图", symbol: "doc.on.doc", action: #selector(copyImage))
         copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = .command
@@ -145,7 +155,19 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         canvas.tool = tool
         captureToolbar?.selectTool(tool)
         for (key, button) in toolButtons { button.state = key == tool ? .on : .off }
+        updateOptions()
         window?.makeFirstResponder(canvas)
+    }
+    private func updateOptions() {
+        guard !isCapture else { return }
+        let tool = canvas.settingsTool
+        colorCaption.isHidden = tool.isRedaction
+        colorButtons.forEach { $0.isHidden = tool.isRedaction }
+        widthSelector.configureStyle(for: canvas)
+        redactionModeSelector.isHidden = !tool.isRedaction
+        redactionModeSelector.selectedSegment = canvas.redactionMode.rawValue
+        brushSizeSelector.isHidden = !tool.isRedaction || canvas.redactionMode != .brush
+        brushSizeSelector.configure(title: "笔刷", value: canvas.redactionBrushSize, range: 6...200, step: 1)
     }
     @objc private func toolClicked(_ sender: NSButton) {
         if let id = sender.identifier?.rawValue, let tool = MarkTool(rawValue: id) { choose(tool) }
@@ -156,8 +178,9 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         colorButtons.forEach { $0.state = $0 === sender ? .on : .off }
         window?.makeFirstResponder(canvas)
     }
-    @objc private func widthChanged(_ sender: NSPopUpButton) {
-        canvas.commitText(); canvas.markWidth = [CGFloat(1.5), 3, 5][sender.indexOfSelectedItem]
+    @objc private func redactionModeChanged(_ sender: NSSegmentedControl) {
+        canvas.redactionMode = RedactionMode(rawValue: sender.selectedSegment) ?? .region
+        brushSizeSelector.isHidden = canvas.redactionMode != .brush
         window?.makeFirstResponder(canvas)
     }
     @objc func undoMark() { canvas.undo(); window?.makeFirstResponder(canvas) }
@@ -183,6 +206,13 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         if NSPasteboard.general.setData(png, forType: .png) {
             if isCapture { close() } else { window?.title = "轻截 · 已复制截图" }
         } else { showError("无法写入剪贴板，请重试") }
+    }
+    @objc func pinImage() {
+        guard let onPin else { return }
+        guard let image = canvas.renderedImage(), let window else { showError("无法生成截图"); return }
+        let frame = window.convertToScreen(canvas.convert(canvas.bounds, to: nil))
+        onPin(image, canvas.logicalSize, frame)
+        if isCapture { close() }
     }
     @objc func saveImage() {
         canvas.commitText()

@@ -53,11 +53,36 @@ extension Tests {
         let mainButtons = buttons.filter { $0.superview !== toolbar.palette }
         expect(Set(mainButtons.map { $0.convert($0.bounds, to: toolbar).midY }).count == 1, "所有主要操作位于同一排图标栏")
         expect(buttons.allSatisfy { toolbar.bounds.contains($0.convert($0.bounds, to: toolbar)) }, "全部工具按钮完整显示")
+        let sizeControls = toolbar.palette.subviews.compactMap { $0 as? AnnotationSizeSlider }
+        func changeSize(_ value: Double, brush: Bool = false) {
+            let slider = sizeControls[brush ? 1 : 0].slider
+            slider.doubleValue = value
+            NSApp.sendAction(slider.action!, to: slider.target, from: slider)
+        }
         for tool in MarkTool.allCases {
             let button = buttons.first { $0.identifier?.rawValue == tool.rawValue }!
             button.performClick(nil)
             expect(canvas.tool == tool && button.state == .on, "原位工具栏切换\(tool.title)")
         }
+        for tool in [MarkTool.blur, .mosaic] {
+            editor.choose(tool)
+            changeSize(5)
+            expect(canvas.redactionStrength == 5 && canvas.markWidth == 3, "\(tool.title)强度设置独立于线宽")
+            expect(toolbar.palette.subviews.compactMap { $0 as? NSButton }.filter { $0.toolTip == "红色" }.allSatisfy(\.isHidden),
+                   "遮挡工具隐藏无关颜色选项")
+            changeSize(3)
+            let mode = toolbar.palette.subviews.compactMap { $0 as? NSSegmentedControl }.first!
+            mode.selectedSegment = RedactionMode.brush.rawValue
+            NSApp.sendAction(mode.action!, to: mode.target, from: mode)
+            let brush = sizeControls[1]
+            expect(canvas.redactionMode == .brush && !brush.isHidden, "\(tool.title)可切换涂抹模式并显示笔刷设置")
+            changeSize(48, brush: true)
+            expect(canvas.redactionBrushSize == 48 && canvas.redactionStrength == 3, "笔刷大小独立于遮挡强度")
+            mode.selectedSegment = RedactionMode.region.rawValue
+            NSApp.sendAction(mode.action!, to: mode.target, from: mode)
+            expect(canvas.redactionMode == .region && brush.isHidden, "\(tool.title)保留原有框选方式")
+        }
+        editor.choose(.arrow)
         let settings = buttons.first { $0.title == "标注设置" }!
         settings.performClick(nil)
         expect(toolbar.palette.isHidden, "标注设置按钮可收起小面板")
@@ -68,9 +93,9 @@ extension Tests {
         expect(toolbar.palette.isHidden, "选择工具收起颜色与粗细面板")
         buttons.first { $0.identifier?.rawValue == MarkTool.arrow.rawValue }!.performClick(nil)
         expect(!toolbar.palette.isHidden, "绘图工具显示对应设置面板")
-        buttons.first { $0.toolTip == "线条粗细 5.0" }!.performClick(nil)
-        expect(canvas.markWidth == 5 && window.firstResponder === canvas, "粗细按钮修改线宽并恢复画布焦点")
-        buttons.first { $0.toolTip == "线条粗细 3.0" }!.performClick(nil)
+        changeSize(5)
+        expect(canvas.markWidth == 5 && window.firstResponder === canvas, "粗细滑块修改线宽并恢复画布焦点")
+        changeSize(3)
         let floatingFrame = toolbar.frame
         toolbar.setFrameOrigin(CGPoint(x: selection.minX + 10, y: selection.minY + 10))
         let clearPoint = CGPoint(x: toolbar.frame.minX + 8, y: toolbar.frame.minY + 70)
@@ -98,6 +123,18 @@ extension Tests {
         canvas.mouseDragged(with: event(.leftMouseDragged, x: 270, y: 140))
         canvas.mouseUp(with: event(.leftMouseUp, x: 270, y: 140))
         expect(canvas.marks.first?.points.first == CGPoint(x: 400, y: 140), "原位绘制使用选区局部坐标")
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.01))
+        let arrowBeforeWidth = canvas.marks[0]
+        changeSize(5)
+        expect(canvas.marks[0].width == 5 && canvas.marks[0].bounds.height > arrowBeforeWidth.bounds.height,
+               "工具栏粗细设置立即改变已选中箭头的箭身和箭头宽度")
+        expect(canvas.marks[0].points == arrowBeforeWidth.points, "修改箭头粗细保持端点位置")
+        canvas.undo()
+        expect(canvas.marks[0].width == 3, "箭头粗细修改可以撤销")
+        canvas.redo()
+        expect(canvas.marks[0].width == 5, "箭头粗细修改可以重做")
+        canvas.undo()
+        changeSize(3)
         let undo = buttons.first { $0.title == "撤销" }!
         undo.performClick(nil)
         expect(canvas.marks.isEmpty && window.firstResponder === canvas, "原位撤销并恢复键盘焦点")
@@ -122,6 +159,9 @@ extension Tests {
             try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: ".build/capture-editor-preview.png"))
         }
         let cancelHandler = canvas.onCancel
+        editor.choose(.text)
+        blue.performClick(nil)
+        try textEditing(canvas: canvas, window: window, view: view)
         let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                                       windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
                                       charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!

@@ -1,27 +1,39 @@
 import AppKit
 
 final class SelectionView: NSView {
-    private let snapshot: NSImage
-    private let pixelSize: CGSize
+    private var snapshot: NSImage?
+    private var pixelSize: CGSize
     private var start: CGPoint?
     private var end: CGPoint?
+    private var completedSelection: CGRect?
     var onSelect: ((CGRect) -> Void)?
     var onCancel: (() -> Void)?
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
-    init(image: CGImage, size: CGSize) {
-        snapshot = NSImage(cgImage: image, size: size)
-        pixelSize = CGSize(width: image.width, height: image.height)
+    init(image: CGImage? = nil, size: CGSize, pixelSize: CGSize? = nil) {
+        snapshot = image.map { NSImage(cgImage: $0, size: size) }
+        self.pixelSize = image.map { CGSize(width: $0.width, height: $0.height) } ?? pixelSize ?? size
         super.init(frame: CGRect(origin: .zero, size: size))
         setAccessibilityLabel("截图选区，拖动鼠标框选，按 Escape 取消")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+    func updateSnapshot(_ image: CGImage) {
+        snapshot = NSImage(cgImage: image, size: bounds.size)
+        pixelSize = CGSize(width: image.width, height: image.height)
+        needsDisplay = true
+        if let selection = completedSelection {
+            completedSelection = nil
+            onSelect?(selection)
+        }
+    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .crosshair) }
     override func mouseDown(with event: NSEvent) {
         window?.makeKey()
         window?.makeFirstResponder(self)
         start = convert(event.locationInWindow, from: nil)
         end = start
+        completedSelection = nil
         needsDisplay = true
     }
     override func mouseDragged(with event: NSEvent) {
@@ -32,14 +44,18 @@ final class SelectionView: NSView {
         guard let start else { return }
         end = convert(event.locationInWindow, from: nil)
         let rect = Geometry.rect(from: start, to: end!).intersection(bounds)
-        if rect.width >= 2 && rect.height >= 2 { onSelect?(rect) }
+        if rect.width >= 2 && rect.height >= 2 {
+            if snapshot != nil { onSelect?(rect) }
+            else { completedSelection = rect }
+        }
     }
     override func rightMouseDown(with event: NSEvent) { onCancel?() }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 53 { onCancel?() } else { super.keyDown(with: event) }
     }
     override func draw(_ dirtyRect: NSRect) {
-        snapshot.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
+        if let snapshot { snapshot.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil) }
+        else { NSColor.clear.setFill(); dirtyRect.fill(using: .copy) }
         let shade = NSBezierPath(rect: bounds)
         if let start, let end {
             let selection = Geometry.rect(from: start, to: end).intersection(bounds)
