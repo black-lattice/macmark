@@ -21,5 +21,5 @@ iconutil -c icns .build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns
 # Ad-hoc signing makes the arm64 executable valid. This is not Developer ID signing.
 codesign --force --sign - --identifier io.github.black-lattice.macmark "$APP"
 codesign --verify --deep --strict "$APP"
-lipo -verify_arch arm64 x86_64 "$APP/Contents/MacOS/MacMark"
+lipo "$APP/Contents/MacOS/MacMark" -verify_arch arm64 x86_64
 plutil -lint "$APP/Contents/Info.plist"
