@@ -29,7 +29,8 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     private func buildUI() {
-        guard let content = window?.contentView else { return }
+        let content = EditorBackgroundView()
+        window?.contentView = content
         let tools = NSStackView()
         tools.spacing = 4
         for tool in MarkTool.allCases {
@@ -37,7 +38,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
             button.image = NSImage(systemSymbolName: tool.symbol, accessibilityDescription: tool.title)
             button.imagePosition = .imageLeading
             button.bezelStyle = .rounded
-            button.setButtonType(.toggle)
+            button.setButtonType(.pushOnPushOff)
             button.identifier = NSUserInterfaceItemIdentifier(tool.rawValue)
             button.toolTip = "\(tool.title)（\(tool.key.uppercased())）"
             button.setAccessibilityLabel(button.toolTip)
@@ -60,7 +61,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         for (index, entry) in colors.enumerated() {
             let b = NSButton(title: entry.0, target: self, action: #selector(colorClicked(_:)))
             b.bezelStyle = .rounded
-            b.setButtonType(.toggle)
+            b.setButtonType(.pushOnPushOff)
             b.contentTintColor = entry.1
             b.tag = index
             b.toolTip = entry.0
@@ -191,5 +192,13 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     private enum ExportError: LocalizedError {
         case failed
         var errorDescription: String? { "无法编码 PNG" }
+    }
+}
+
+private final class EditorBackgroundView: NSView {
+    override var isOpaque: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.windowBackgroundColor.setFill()
+        dirtyRect.fill()
     }
 }
