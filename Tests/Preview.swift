@@ -43,5 +43,6 @@ extension Tests {
             try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: ".build/editor-preview.png"))
         }
         editor.close()
+        try captureEditing(snapshot: base, size: size)
     }
 }

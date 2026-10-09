@@ -1,6 +1,6 @@
 import AppKit
 
-final class CanvasView: NSView {
+final class CanvasView: NSView, NSTextFieldDelegate {
     let base: CGImage
     let logicalSize: CGSize
     private let image: NSImage
@@ -18,6 +18,7 @@ final class CanvasView: NSView {
     private var textWidth: CGFloat = 3
     private let history = UndoManager()
     var onToolKey: ((MarkTool) -> Void)?
+    var onCancel: (() -> Void)?
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
     override var undoManager: UndoManager? { history }
@@ -101,10 +102,19 @@ final class CanvasView: NSView {
     }
     override func keyDown(with event: NSEvent) {
         if event.keyCode == 51 || event.keyCode == 117 { deleteSelected(); return }
-        if event.keyCode == 53 { selectedID = nil; needsDisplay = true; return }
+        if event.keyCode == 53 {
+            if let onCancel { onCancel() } else { selectedID = nil; needsDisplay = true }
+            return
+        }
         if !event.modifierFlags.contains(.command), let key = event.charactersIgnoringModifiers?.lowercased(),
            let next = MarkTool.allCases.first(where: { $0.key == key }) { onToolKey?(next); return }
         super.keyDown(with: event)
+    }
+    override func rightMouseDown(with event: NSEvent) {
+        if let onCancel { onCancel() } else { super.rightMouseDown(with: event) }
+    }
+    override func cancelOperation(_ sender: Any?) {
+        if let onCancel { onCancel() } else { super.cancelOperation(sender) }
     }
     func deleteSelected() {
         guard let id = selectedID else { return }
@@ -133,6 +143,7 @@ final class CanvasView: NSView {
         field.textColor = markColor
         field.placeholderString = "输入文字，回车确认"
         field.target = self
+        field.delegate = self
         field.action = #selector(finishText)
         field.setAccessibilityLabel("标注文字")
         addSubview(field)
@@ -140,6 +151,13 @@ final class CanvasView: NSView {
         window?.makeFirstResponder(field)
     }
     @objc private func finishText() { commitText(); window?.makeFirstResponder(self) }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        if commandSelector == #selector(NSResponder.cancelOperation(_:)), let onCancel {
+            onCancel()
+            return true
+        }
+        return false
+    }
     func commitText() {
         guard let field = textField else { return }
         let text = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)

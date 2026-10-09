@@ -7,28 +7,41 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     private var toolButtons: [MarkTool: NSButton] = [:]
     private var colorButtons: [NSButton] = []
     private var zoom: CGFloat = 1
+    private let isCapture: Bool
+    private var captureToolbar: CaptureToolbarView?
     var onClose: (() -> Void)?
-    init(image: CGImage, size: CGSize) {
+    init(image: CGImage, size: CGSize, captureContext: CaptureEditingContext? = nil) {
         canvas = CanvasView(base: image, size: size)
+        isCapture = captureContext != nil
         let available = NSScreen.main?.visibleFrame.size ?? CGSize(width: 1200, height: 800)
         let frame = CGRect(x: 0, y: 0, width: min(1040, available.width - 40), height: min(760, available.height - 40))
-        let window = NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable],
+        let window = captureContext?.window ?? NSWindow(contentRect: frame, styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "轻截 · 截图标注"
-        window.minSize = CGSize(width: 780, height: 420)
+        if !isCapture { window.minSize = CGSize(width: 780, height: 420) }
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
-        buildUI()
+        buildUI(captureContext: captureContext)
         canvas.onToolKey = { [weak self] tool in self?.choose(tool) }
-        window.center()
+        if isCapture { canvas.onCancel = { [weak self] in self?.close() } }
+        else { window.center() }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        fit()
+        if !isCapture { fit() }
         window.makeFirstResponder(canvas)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    private func buildUI() {
+    private func buildUI(captureContext: CaptureEditingContext?) {
+        if let captureContext {
+            let toolbar = CaptureToolbarView(canvas: canvas, controller: self)
+            captureToolbar = toolbar
+            let overlay = CaptureEditorView(context: captureContext, canvas: canvas, toolbar: toolbar)
+            overlay.onCancel = { [weak self] in self?.close() }
+            window?.contentView = overlay
+            overlay.layoutSubtreeIfNeeded()
+            return
+        }
         let content = EditorBackgroundView()
         window?.contentView = content
         let tools = NSStackView()
@@ -63,6 +76,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
             b.bezelStyle = .rounded
             b.setButtonType(.pushOnPushOff)
             b.contentTintColor = entry.1
+            b.setAccessibilityLabel(entry.0)
             b.tag = index
             b.toolTip = entry.0
             b.state = index == 0 ? .on : .off
@@ -127,8 +141,9 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         b.setAccessibilityLabel(title)
         return b
     }
-    private func choose(_ tool: MarkTool) {
+    func choose(_ tool: MarkTool) {
         canvas.tool = tool
+        captureToolbar?.selectTool(tool)
         for (key, button) in toolButtons { button.state = key == tool ? .on : .off }
         window?.makeFirstResponder(canvas)
     }
@@ -145,8 +160,8 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         canvas.commitText(); canvas.markWidth = [CGFloat(1.5), 3, 5][sender.indexOfSelectedItem]
         window?.makeFirstResponder(canvas)
     }
-    @objc func undoMark() { canvas.undo() }
-    @objc func redoMark() { canvas.redo() }
+    @objc func undoMark() { canvas.undo(); window?.makeFirstResponder(canvas) }
+    @objc func redoMark() { canvas.redo(); window?.makeFirstResponder(canvas) }
     @objc func deleteMark() { canvas.deleteSelected() }
     @objc private func fit() {
         window?.contentView?.layoutSubtreeIfNeeded()
@@ -166,7 +181,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         guard let image = canvas.renderedImage(), let png = Renderer.png(image) else { showError("无法生成截图"); return }
         NSPasteboard.general.clearContents()
         if NSPasteboard.general.setData(png, forType: .png) {
-            window?.title = "轻截 · 已复制截图"
+            if isCapture { close() } else { window?.title = "轻截 · 已复制截图" }
         } else { showError("无法写入剪贴板，请重试") }
     }
     @objc func saveImage() {
@@ -175,18 +190,27 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         panel.allowedContentTypes = [.png]
         panel.nameFieldStringValue = "轻截-\(DateFormatter.localizedString(from: Date(), dateStyle: .short, timeStyle: .medium).replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-"))"
         guard let window else { return }
+        if isCapture { window.level = .normal }
         panel.beginSheetModal(for: window) { [weak self] response in
-            guard response == .OK, let self, let url = panel.url else { return }
+            guard let self else { return }
+            if self.isCapture { self.window?.level = .screenSaver }
+            guard response == .OK, let url = panel.url else { self.window?.makeFirstResponder(self.canvas); return }
             do {
                 guard let image = self.canvas.renderedImage(), let data = Renderer.png(image) else { throw ExportError.failed }
                 try data.write(to: url, options: .atomic)
-                self.window?.title = "轻截 · 已保存截图"
+                if self.isCapture { self.close() } else { self.window?.title = "轻截 · 已保存截图" }
             } catch { self.showError("保存失败：\(error.localizedDescription)") }
         }
     }
     private func showError(_ message: String) {
         let alert = NSAlert(); alert.messageText = message
-        if let window { alert.beginSheetModal(for: window) }
+        if let window {
+            if isCapture { window.level = .normal }
+            alert.beginSheetModal(for: window) { [weak self] _ in
+                if self?.isCapture == true { self?.window?.level = .screenSaver }
+                self?.window?.makeFirstResponder(self?.canvas)
+            }
+        }
     }
     func windowWillClose(_ notification: Notification) { onClose?() }
     private enum ExportError: LocalizedError {

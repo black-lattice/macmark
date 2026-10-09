@@ -2,6 +2,7 @@ import AppKit
 
 final class SelectionView: NSView {
     private let snapshot: NSImage
+    private let pixelSize: CGSize
     private var start: CGPoint?
     private var end: CGPoint?
     var onSelect: ((CGRect) -> Void)?
@@ -10,6 +11,7 @@ final class SelectionView: NSView {
     override var acceptsFirstResponder: Bool { true }
     init(image: CGImage, size: CGSize) {
         snapshot = NSImage(cgImage: image, size: size)
+        pixelSize = CGSize(width: image.width, height: image.height)
         super.init(frame: CGRect(origin: .zero, size: size))
         setAccessibilityLabel("截图选区，拖动鼠标框选，按 Escape 取消")
     }
@@ -45,13 +47,8 @@ final class SelectionView: NSView {
             shade.windingRule = .evenOdd
             NSColor.black.withAlphaComponent(0.42).setFill()
             shade.fill()
-            NSColor.white.setStroke()
-            let border = NSBezierPath(rect: selection.insetBy(dx: 0.5, dy: 0.5))
-            border.lineWidth = 1
-            border.stroke()
-            let text = "\(Int(selection.width)) × \(Int(selection.height)) pt"
-            drawLabel(text, at: CGPoint(x: min(selection.minX, max(12, bounds.width - 170)),
-                                       y: max(12, selection.minY - 34)))
+            let pixels = Geometry.cropRect(selection: selection, screenSize: bounds.size, imageSize: pixelSize)
+            CaptureSelectionStyle.draw(selection: selection, pixelSize: pixels.size, within: bounds)
         } else {
             NSColor.black.withAlphaComponent(0.28).setFill()
             shade.fill()

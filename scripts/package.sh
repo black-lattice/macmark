@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.1.1}"
 NAME="MacMark-$VERSION-universal"
 [[ -d dist/MacMark.app ]] || { echo "请先执行 scripts/build.sh"; exit 1; }
 STAGE=".build/dmg"

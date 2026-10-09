@@ -10,6 +10,7 @@ enum Tests {
     }
     @MainActor static func main() throws {
         _ = NSApplication.shared
+        try shortcuts()
         let reversed = Geometry.rect(from: CGPoint(x: 90, y: 80), to: CGPoint(x: 10, y: 20))
         expect(reversed == CGRect(x: 10, y: 20, width: 80, height: 60), "反向拖动选区")
         let crop = Geometry.cropRect(selection: reversed, screenSize: CGSize(width: 100, height: 100),

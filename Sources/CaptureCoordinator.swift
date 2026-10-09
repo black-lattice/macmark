@@ -6,7 +6,7 @@ final class CaptureCoordinator {
     private var overlays: [NSWindow] = []
     private var busy = false
     private var previousApp: NSRunningApplication?
-    var onCapture: ((CGImage, CGSize) -> Void)?
+    var onCapture: ((CGImage, CGSize, CaptureEditingContext) -> Void)?
     var onError: ((String) -> Void)?
     func start() {
         guard !busy else { return }
@@ -55,14 +55,17 @@ final class CaptureCoordinator {
             window.isReleasedWhenClosed = false
             let view = SelectionView(image: image, size: screen.frame.size)
             view.onCancel = { [weak self] in self?.cancel() }
-            view.onSelect = { [weak self] rect in
+            view.onSelect = { [weak self, weak window] rect in
+                guard let self, let window, let onCapture = self.onCapture else { return }
                 let pixels = Geometry.cropRect(selection: rect, screenSize: screen.frame.size,
                                                imageSize: CGSize(width: image.width, height: image.height))
                 guard pixels.width >= 2, pixels.height >= 2, let cropped = image.cropping(to: pixels) else { return }
-                let size = CGSize(width: pixels.width * screen.frame.width / CGFloat(image.width),
-                                  height: pixels.height * screen.frame.height / CGFloat(image.height))
-                self?.finish()
-                self?.onCapture?(cropped, size)
+                // Keep this overlay and its frozen backdrop at the original capture position.
+                self.overlays.removeAll { $0 === window }
+                for overlay in self.overlays { overlay.orderOut(nil); overlay.close() }
+                self.overlays.removeAll()
+                let context = CaptureEditingContext(window: window, snapshot: image, selection: rect)
+                onCapture(cropped, rect.size, context)
             }
             window.contentView = view
             overlays.append(window)
@@ -87,4 +90,5 @@ final class CaptureCoordinator {
 
 final class SelectionWindow: NSWindow {
     override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }

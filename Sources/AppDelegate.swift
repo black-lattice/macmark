@@ -5,6 +5,9 @@ import ServiceManagement
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var shortcut: HotKey?
+    private var captureShortcut = CaptureShortcut.load()
+    private var captureItem: NSMenuItem!
+    private var shortcutSettings: ShortcutSettingsController?
     private let capture = CaptureCoordinator()
     private var editors: [EditorController] = []
     private var loginItem: NSMenuItem!
@@ -16,9 +19,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         createMainMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "viewfinder", accessibilityDescription: "轻截 MacMark")
-        statusItem.button?.toolTip = "轻截 · ⌘⇧2 截图"
         let menu = NSMenu()
-        add("区域截图", action: #selector(takeScreenshot), to: menu, key: "2", modifiers: [.command, .shift])
+        captureItem = add("区域截图", action: #selector(takeScreenshot), to: menu)
+        add("截图快捷键…", action: #selector(configureShortcut), to: menu)
+        updateShortcutDisplay()
         add("打开图片…", action: #selector(openImage), to: menu)
         menu.addItem(.separator())
         loginItem = add("登录时启动", action: #selector(toggleLogin), to: menu)
@@ -29,10 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         add("退出轻截", action: #selector(quit), to: menu, key: "q")
         statusItem.menu = menu
-        capture.onCapture = { [weak self] image, size in self?.showEditor(image, size: size) }
+        capture.onCapture = { [weak self] image, size, context in self?.showEditor(image, size: size, captureContext: context) }
         capture.onError = { [weak self] message in self?.alert(message) }
         shortcut = HotKey { [weak self] in self?.takeScreenshot() }
-        if shortcut?.register() != true { alert("⌘⇧2 快捷键注册失败，可能被其他应用占用。仍可通过菜单栏的「区域截图」使用。") }
+        if shortcut?.register(captureShortcut) != true { showShortcutError() }
         if !UserDefaults.standard.bool(forKey: "didShowWelcome") {
             UserDefaults.standard.set(true, forKey: "didShowWelcome")
             showHelp()
@@ -42,13 +46,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let root = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: "轻截")
+        add("截图快捷键…", action: #selector(configureShortcut), to: appMenu)
         add("退出轻截", action: #selector(quit), to: appMenu, key: "q")
         appItem.submenu = appMenu; root.addItem(appItem)
         let fileItem = NSMenuItem(title: "文件", action: nil, keyEquivalent: "")
         let fileMenu = NSMenu(title: "文件")
         add("打开图片…", action: #selector(openImage), to: fileMenu, key: "o")
         add("保存 PNG…", action: #selector(saveCurrent), to: fileMenu, key: "s")
-        fileMenu.addItem(NSMenuItem(title: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
+        add("关闭窗口", action: #selector(closeCurrent), to: fileMenu, key: "w")
         fileItem.submenu = fileMenu; root.addItem(fileItem)
         let editItem = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
         let editMenu = NSMenu(title: "编辑")
@@ -70,8 +75,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
     private var current: EditorController? { editors.first { $0.window === NSApp.keyWindow } }
-    @objc private func takeScreenshot() { capture.start() }
+    @objc private func takeScreenshot() {
+        if let shortcutSettings { shortcutSettings.window?.makeKeyAndOrderFront(nil); return }
+        capture.start()
+    }
+    private func updateShortcutDisplay() {
+        statusItem.button?.toolTip = "轻截 · \(captureShortcut.display) 截图"
+        captureItem.keyEquivalent = captureShortcut.keyEquivalent
+        captureItem.keyEquivalentModifierMask = captureShortcut.modifiers
+    }
+    private func showShortcutError() {
+        alert("\(captureShortcut.display) 快捷键注册失败，可能被其他应用占用。可在菜单栏「截图快捷键…」中更换，或使用「区域截图」。")
+    }
+    @objc private func configureShortcut() {
+        if let shortcutSettings {
+            shortcutSettings.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        // The old global shortcut must be released so its keys can be recorded too.
+        shortcut?.unregister()
+        let settings = ShortcutSettingsController(shortcut: captureShortcut)
+        shortcutSettings = settings
+        settings.onApply = { [weak self] value in
+            guard let self else { return "无法保存快捷键，请重新打开设置。" }
+            if let title = value.conflictingMenuTitle(in: NSApp.mainMenu) {
+                return "该组合键已用于「\(title)」，请选择其他组合。"
+            }
+            guard self.shortcut?.register(value) == true else { return "快捷键被占用或无法注册，请选择其他组合。" }
+            self.captureShortcut = value
+            value.save()
+            self.updateShortcutDisplay()
+            return nil
+        }
+        settings.onClose = { [weak self] in
+            guard let self else { return }
+            self.shortcutSettings = nil
+            if self.shortcut?.register(self.captureShortcut) != true { self.showShortcutError() }
+        }
+    }
     @objc private func saveCurrent() { current?.saveImage() }
+    @objc private func closeCurrent() { current?.close() }
     @objc private func copyCurrent() {
         if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
         else { current?.copyImage() }
@@ -95,10 +139,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.showEditor(image, size: CGSize(width: image.width, height: image.height))
         }
     }
-    private func showEditor(_ image: CGImage, size: CGSize) {
-        let editor = EditorController(image: image, size: size)
+    private func showEditor(_ image: CGImage, size: CGSize, captureContext: CaptureEditingContext? = nil) {
+        let editor = EditorController(image: image, size: size, captureContext: captureContext)
         editors.append(editor)
-        editor.onClose = { [weak self, weak editor] in self?.editors.removeAll { $0 === editor } }
+        editor.onClose = { [weak self, weak editor] in
+            self?.editors.removeAll { $0 === editor }
+            if captureContext != nil { self?.capture.cancel() }
+        }
     }
     @objc private func toggleLogin() {
         do {
@@ -115,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(URL(string: "https://github.com/black-lattice/macmark/releases/latest")!)
     }
     @objc private func showHelp() {
-        alert("轻截已在菜单栏待命。按 ⌘⇧2 或点击菜单栏「区域截图」，拖动框选，Esc 取消。\n\n编辑器：A 箭头、L 直线、P 画笔、R 方框、T 文字、V 选择。按住 Shift 画横线、竖线或正方形。选择后可拖动标注，Delete 删除，⌘Z 撤销。\n\n⌘C 复制，⌘S 保存 PNG。图片只在本地处理。首次截图需要屏幕录制权限。")
+        alert("轻截已在菜单栏待命。按 \(captureShortcut.display) 或点击菜单栏「区域截图」，拖动框选，松开后直接在原位置标注，工具栏显示在选区旁，可拖动空白处移动。Esc 或右键取消。菜单栏「截图快捷键…」可自定义组合键。\n\n工具：A 箭头、L 直线、P 画笔、R 方框、T 文字、V 选择。按住 Shift 画横线、竖线或正方形。选择后可拖动标注，Delete 删除，⌘Z 撤销。\n\n⌘C 复制，⌘S 保存 PNG；成功后结束本次截图。打开本地图片仍使用独立编辑器。图片只在本地处理。首次截图需要屏幕录制权限。")
     }
     private func alert(_ message: String) {
         NSApp.activate(ignoringOtherApps: true)
