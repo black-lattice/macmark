@@ -92,6 +92,10 @@ open dist/MacMark.app
 推送 main 或 PR：分别在 `macos-15`（arm64）及 `macos-15-intel` 运行测试，随后交叉编译 Universal 安装包。
 推送 `vX.Y.Z` 标签：同样测试和构建，再自动发布 GitHub Release，附带 DMG、ZIP、SHA256 和空闲采样。
 
+每次发布前更新 `RELEASE_NOTES.md`，首行使用 `## vX.Y.Z`，正文只列出相较上一版本新增、改进和修复的内容。
+无需重复安装步骤、完整快捷键列表、测试清单和既有功能介绍；通用使用说明放在本 README 和 `INSTALL.txt` 中。
+发布说明与代码、版本号一起提交后再推送标签。流水线会核对说明中的版本与标签一致，避免误用上一版本的说明。
+
 ```sh
 git tag v0.1.4
 git push origin v0.1.4

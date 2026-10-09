@@ -21,6 +21,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: 校验版本更新说明
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          if [[ "$(head -n 1 RELEASE_NOTES.md)" != "## $GITHUB_REF_NAME" ]]; then
+            echo "请更新 RELEASE_NOTES.md，只填写本次版本的变化，首行应为：## $GITHUB_REF_NAME"
+            exit 1
+          fi
       - name: 运行选区、导出和编辑测试
         run: scripts/test.sh
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
