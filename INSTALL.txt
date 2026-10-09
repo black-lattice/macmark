@@ -1,0 +1,21 @@
+轻截 MacMark · 安装说明
+
+系统要求：macOS 14 或更新版本，支持 M 系列及 Intel Mac，同一个 universal 安装包。
+
+1. 打开 DMG，将 MacMark.app 拖到 Applications（应用程序）。
+2. 从应用程序中打开 MacMark。首次启动后，应用出现在屏幕右上角菜单栏。
+3. 当前版本未经 Apple Developer ID 签名及公证。如果系统阻止打开，先尝试打开一次，
+   然后进入「系统设置 → 隐私与安全性」，找到 MacMark 的拦截提示，点击「仍要打开」。
+   请仅对你确认从 black-lattice/macmark 官方 Releases 下载的应用执行此操作。
+4. 按 ⌘⇧2 截图，按提示在「隐私与安全性 → 屏幕与系统音频录制」中允许 MacMark。
+   系统版本不同，权限名称可能是「屏幕录制」。授权后退出应用，再重新打开。
+5. 拖动鼠标框选截图，编辑完成后 ⌘C 复制或 ⌘S 保存 PNG。
+
+快捷键：A 箭头 / L 直线 / P 画笔 / R 方框 / T 文字 / V 选择。
+Shift 约束方向（横线、竖线、45° 线）或正方形。
+选择后拖动标注，Delete 删除，⌘Z 撤销，⇧⌘Z 重做。
+Esc 或鼠标右键取消选区。菜单栏可打开本地图片进行标注。
+
+图片只在本地处理，无后台录制、轮询、遥测、自动上传。
+版本更新：菜单栏「检查新版本」打开 GitHub Releases，手动下载替换。
+下载与源码：https://github.com/black-lattice/macmark
