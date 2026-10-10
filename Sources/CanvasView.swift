@@ -4,6 +4,7 @@ final class CanvasView: NSView {
     private(set) var base: CGImage
     private(set) var logicalSize: CGSize
     private var image: NSImage
+    var drawsBaseImage = true { didSet { needsDisplay = true } }
     var tool: MarkTool = .arrow { didSet { commitText(); selectedID = nil; needsDisplay = true; refreshCursor(); onSelectionChange?() } }
     var markColor: NSColor = .systemRed
     var markWidth: CGFloat = 3
@@ -95,7 +96,9 @@ final class CanvasView: NSView {
                        y: max(0, min(logicalSize.height, p.y / scale)))
     }
     override func draw(_ dirtyRect: NSRect) {
-        image.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
+        if drawsBaseImage {
+            image.draw(in: bounds, from: .zero, operation: .copy, fraction: 1, respectFlipped: true, hints: nil)
+        }
         NSGraphicsContext.saveGraphicsState()
         let transform = NSAffineTransform()
         transform.scale(by: scale)

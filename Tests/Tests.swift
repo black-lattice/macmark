@@ -34,6 +34,8 @@ enum Tests {
         ctx.setFillColor(NSColor.white.cgColor); ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 200))
         ctx.setFillColor(NSColor.green.cgColor); ctx.fill(CGRect(x: 0, y: 160, width: 40, height: 40))
         let base = ctx.makeImage()!
+        try windowSelection(base: base)
+        try captureResizeStability()
         try capturePreparationWithRunLoop(base: base)
         let size = CGSize(width: 100, height: 100)
         let line = Annotation(tool: .line, points: [CGPoint(x: 30, y: 25), CGPoint(x: 85, y: 25)], color: .red, width: 3)

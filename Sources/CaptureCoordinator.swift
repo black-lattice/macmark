@@ -8,6 +8,7 @@ final class CaptureCoordinator {
     private let source: CaptureImageSource
     private let hasAccess: () -> Bool
     private let displays: @MainActor () -> [CaptureDisplay]
+    private let windowFrames: @MainActor () -> [CGRect]
     private var session: UUID?
     private var captureTask: Task<Void, Never>?
     private var snapshots: [CGDirectDisplayID: CGImage] = [:]
@@ -16,9 +17,11 @@ final class CaptureCoordinator {
     var onError: ((String) -> Void)?
     init(source: CaptureImageSource? = nil,
          hasAccess: @escaping () -> Bool = { CGPreflightScreenCaptureAccess() },
-         displays: (@MainActor () -> [CaptureDisplay])? = nil) {
+         displays: (@MainActor () -> [CaptureDisplay])? = nil,
+         windowFrames: (@MainActor () -> [CGRect])? = nil) {
         self.source = source ?? ScreenSnapshotSource(); self.hasAccess = hasAccess
         self.displays = displays ?? CaptureDisplay.current
+        self.windowFrames = windowFrames ?? WindowSelection.current
     }
     func prepare() { if hasAccess() { source.prepare() } }
     func start() {
@@ -52,16 +55,20 @@ final class CaptureCoordinator {
         }
     }
     private func present(_ targets: [CaptureDisplay], session id: UUID) {
+        let candidates = windowFrames()
         let keyDisplay = targets.first { $0.frame.contains(NSEvent.mouseLocation) } ?? targets.first
         for target in targets {
             let window = SelectionWindow(contentRect: target.frame, styleMask: [.borderless, .nonactivatingPanel],
                                          backing: .buffered, defer: false)
+            window.animationBehavior = .none
             window.level = .screenSaver
             window.isOpaque = false; window.backgroundColor = .clear
             window.hidesOnDeactivate = false
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             window.isReleasedWhenClosed = false
-            let view = SelectionView(size: target.frame.size, pixelSize: target.pixelSize)
+            window.acceptsMouseMovedEvents = true
+            let view = SelectionView(size: target.frame.size, pixelSize: target.pixelSize,
+                                     windowFrames: WindowSelection.localFrames(candidates, display: target.frame))
             view.onCancel = { [weak self] in self?.cancel() }
             view.onSelect = { [weak self, weak window] rect in
                 guard let self, self.session == id, let window, let image = self.snapshots[target.id],
@@ -79,6 +86,7 @@ final class CaptureCoordinator {
             window.contentView = view
             overlays.append(window); windows[target.id] = window
             window.orderFrontRegardless()
+            view.updateHoverFromMouseLocation()
             if target.id == keyDisplay?.id { window.makeKey(); window.makeFirstResponder(view) }
         }
     }

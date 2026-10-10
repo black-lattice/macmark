@@ -28,6 +28,8 @@ final class CaptureEditorView: NSView {
         self.toolbar = toolbar
         super.init(frame: CGRect(origin: .zero, size: size))
         setAccessibilityLabel("截图原位标注，拖动选区四角调整大小，Escape 或右键取消")
+        // Keep the fixed screen snapshot visible instead of rescaling a pixel-rounded crop during resize.
+        canvas.drawsBaseImage = false
         canvas.frame = selection
         addSubview(canvas)
         outline.frame = bounds
@@ -150,7 +152,7 @@ final class CaptureEditorView: NSView {
 }
 
 enum CaptureSelectionStyle {
-    static let blue = NSColor(calibratedRed: 0.22, green: 0.64, blue: 1, alpha: 1)
+    static let blue = NSColor(calibratedRed: 0.08, green: 0.42, blue: 0.94, alpha: 1)
     static func corners(of selection: CGRect) -> [CGPoint] {
         [CGPoint(x: selection.minX, y: selection.minY), CGPoint(x: selection.maxX, y: selection.minY),
          CGPoint(x: selection.maxX, y: selection.maxY), CGPoint(x: selection.minX, y: selection.maxY)]
@@ -163,12 +165,23 @@ enum CaptureSelectionStyle {
                       width: size.width + 12, height: 19)
     }
     static func draw(selection: CGRect, pixelSize: CGSize, within bounds: CGRect, labelBelow: Bool = false) {
+        let border = NSBezierPath(rect: selection)
+        // A white keyline and soft shadow separate the blue from light, dark and busy backgrounds.
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.35)
+        shadow.shadowBlurRadius = 3
+        shadow.shadowOffset = .zero
+        shadow.set()
+        NSColor.white.withAlphaComponent(0.95).setStroke()
+        border.lineWidth = 4
+        border.stroke()
+        NSGraphicsContext.restoreGraphicsState()
         blue.setStroke()
-        let border = NSBezierPath(rect: selection.insetBy(dx: -0.5, dy: -0.5))
-        border.lineWidth = 1
+        border.lineWidth = 2
         border.stroke()
         let brackets = NSBezierPath()
-        let cornerLength: CGFloat = 11
+        let cornerLength = min(18, min(selection.width, selection.height) / 2)
         for (x, dx) in [(selection.minX, CGFloat(1)), (selection.maxX, CGFloat(-1))] {
             for (y, dy) in [(selection.minY, CGFloat(1)), (selection.maxY, CGFloat(-1))] {
                 brackets.move(to: CGPoint(x: x + dx * cornerLength, y: y))
@@ -176,7 +189,12 @@ enum CaptureSelectionStyle {
                 brackets.line(to: CGPoint(x: x, y: y + dy * cornerLength))
             }
         }
-        brackets.lineWidth = 2.5; brackets.stroke()
+        brackets.lineJoinStyle = .round
+        brackets.lineCapStyle = .round
+        NSColor.white.setStroke()
+        brackets.lineWidth = 6; brackets.stroke()
+        blue.setStroke()
+        brackets.lineWidth = 4; brackets.stroke()
         let text = "\(Int(pixelSize.width)) × \(Int(pixelSize.height))"
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium),
                                                        .foregroundColor: NSColor.white]

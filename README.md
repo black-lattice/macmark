@@ -14,7 +14,8 @@
 
 ## 日常使用
 
-应用常驻菜单栏。按 **⌘⇧X**，拖动鼠标框选截图；Esc 或右键取消。
+应用常驻菜单栏。按 **⌘⇧X**，鼠标悬停自动高亮对应窗口，单击进入标注；拖动鼠标仍可自由框选，Esc 或右键取消。
+重叠处优先选择最前面的普通窗口，支持锚定截图；跨屏窗口只选取当前屏幕内的部分。窗口信息仅在触发截图时读取，无需辅助功能权限。
 触发后立即显示可操作的选区，后台并行获取各屏幕画面；提前完成的框选会在画面就绪后直接进入编辑。
 菜单栏「截图快捷键…」可录入自定义组合键，保存后立即生效并在下次启动时恢复，也可恢复默认。
 组合键需包含 Command、Option 或 Control，也可使用独立功能键；与应用菜单或其他应用冲突时会提示更换。
@@ -79,9 +80,9 @@ scripts/test.sh
 # 在真实桌面额外验证锚定截图的鼠标双击文字选择
 MACMARK_INTERACTIVE_TESTS=1 scripts/test.sh
 # 显式构建 Universal .app
-VERSION=0.1.4 scripts/build.sh
+VERSION=0.1.5 scripts/build.sh
 # 打包 DMG / ZIP
-VERSION=0.1.4 scripts/package.sh
+VERSION=0.1.5 scripts/package.sh
 # 本地启动
 open dist/MacMark.app
 ```
@@ -99,8 +100,8 @@ open dist/MacMark.app
 发布说明与代码、版本号一起提交后再推送标签。流水线会核对说明中的版本与标签一致，避免误用上一版本的说明。
 
 ```sh
-git tag v0.1.4
-git push origin v0.1.4
+git tag v0.1.5
+git push origin v0.1.5
 ```
 
 流水线未导入任何 Apple 私钥。正式无拦截分发需后续配置 Developer ID Application 签名和 Apple 公证。

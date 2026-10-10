@@ -1,6 +1,64 @@
 import AppKit
 
 extension Tests {
+    @MainActor static func captureResizeStability() throws {
+        let size = CGSize(width: 800, height: 600)
+        for scale in [1, 2] {
+            let context = CGContext(data: nil, width: 800 * scale, height: 600 * scale, bitsPerComponent: 8, bytesPerRow: 0,
+                                    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.setFillColor(NSColor.white.cgColor)
+            context.fill(CGRect(origin: .zero, size: CGSize(width: 800 * scale, height: 600 * scale)))
+            context.setFillColor(NSColor.black.cgColor)
+            for x in stride(from: 0, to: 800 * scale, by: 4 * scale) {
+                context.fill(CGRect(x: x, y: 0, width: scale, height: 600 * scale))
+            }
+            for y in stride(from: 0, to: 600 * scale, by: 7 * scale) {
+                context.fill(CGRect(x: 0, y: y, width: 800 * scale, height: scale))
+            }
+            let snapshot = context.makeImage()!
+            let initial = CGRect(x: 150, y: 120, width: 420, height: 300)
+            let pixels = Geometry.cropRect(selection: initial, screenSize: size,
+                                           imageSize: CGSize(width: snapshot.width, height: snapshot.height))
+            let window = SelectionWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless,
+                                         backing: .buffered, defer: false)
+            window.contentView = SelectionView(image: snapshot, size: size)
+            let editor = EditorController(image: snapshot.cropping(to: pixels)!, size: initial.size,
+                                          captureContext: CaptureEditingContext(window: window, snapshot: snapshot, selection: initial))
+            let view = window.contentView as! CaptureEditorView
+            func event(_ type: NSEvent.EventType, at point: CGPoint) -> NSEvent {
+                NSEvent.mouseEvent(with: type, location: view.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+            }
+            func interiorPixels() -> [UInt8] {
+                let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)!
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                let sx = CGFloat(bitmap.pixelsWide) / size.width, sy = CGFloat(bitmap.pixelsHigh) / size.height
+                return (Int(230 * sy)..<Int(270 * sy)).flatMap { y in
+                    (Int(300 * sx)..<Int(360 * sx)).map { x in
+                        let color = bitmap.colorAt(x: x, y: y)!.usingColorSpace(.deviceRGB)!
+                        return UInt8((color.redComponent * 255).rounded())
+                    }
+                }
+            }
+            let original = interiorPixels()
+            for corner in 0..<4 {
+                let start = CaptureSelectionStyle.corners(of: view.selection)[corner]
+                let target = view.hitTest(view.convert(start, to: view.superview))!
+                expect(target !== editor.canvas && target !== view, "内容稳定性检查通过四角控制点调整选区")
+                target.mouseDown(with: event(.leftMouseDown, at: start))
+                for distance: CGFloat in [0.25, 0.75, 1.25, 2.5, 7.75] {
+                    let point = CGPoint(x: start.x + (corner == 0 || corner == 3 ? -distance : distance),
+                                        y: start.y + (corner < 2 ? -distance : distance))
+                    target.mouseDragged(with: event(.leftMouseDragged, at: point))
+                    let current = interiorPixels()
+                    let changed = zip(original, current).filter { abs(Int($0) - Int($1)) > 2 }.count
+                    expect(changed == 0, "\(scale)x 截图四角连续调整 \(distance) 点时内容像素保持原位（角 \(corner)）")
+                }
+                target.mouseUp(with: event(.leftMouseUp, at: start))
+            }
+            editor.close()
+        }
+    }
     @MainActor static func captureResizing(snapshot: CGImage, size: CGSize) throws {
         let initial = CGRect(x: 200, y: 140, width: 360, height: 200)
         let pixels = Geometry.cropRect(selection: initial, screenSize: size,

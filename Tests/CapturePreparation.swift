@@ -34,7 +34,11 @@ extension Tests {
         let left = CaptureDisplay(id: 1, frame: CGRect(x: -400, y: 0, width: 400, height: 240), pixelSize: CGSize(width: 800, height: 480))
         let right = CaptureDisplay(id: 2, frame: CGRect(x: 0, y: 0, width: 400, height: 240), pixelSize: CGSize(width: 800, height: 480))
         let source = DeferredCaptureSource()
-        let capture = CaptureCoordinator(source: source, hasAccess: { true }, displays: { [left, right] })
+        var candidateReads = 0
+        let capture = CaptureCoordinator(source: source, hasAccess: { true }, displays: { [left, right] }, windowFrames: {
+            candidateReads += 1
+            return [CGRect(x: -380, y: 120, width: 180, height: 100)]
+        })
         var delivered: CaptureEditingContext?
         var cropped: CGImage?
         var errors: [String] = []
@@ -48,6 +52,7 @@ extension Tests {
         expect(capture.overlays.contains(where: \.isKeyWindow), "准备阶段已有选区接收键盘取消操作")
         capture.start()
         expect(capture.overlays.count == 2, "截图准备过程中重复触发不会创建重复选区")
+        expect(candidateReads == 1, "同一次截图只读取一次窗口信息")
         while source.requests.isEmpty { await Task.yield() }
         let first = capture.overlays[0]
         let view = first.contentView as! SelectionView
@@ -97,13 +102,25 @@ extension Tests {
         delivered?.window.close(); capture.cancel()
         capture.start()
         while source.requests.count < 4 { await Task.yield() }
+        let smartWindow = capture.overlays[0]
+        let smartView = smartWindow.contentView as! SelectionView
+        smartView.mouseDown(with: event(.leftMouseDown, view: smartView, x: 40, y: 40))
+        smartView.mouseUp(with: event(.leftMouseUp, view: smartView, x: 40, y: 40))
+        source.requests[3].receive(left, base)
+        expect(delivered?.selection == CGRect(x: 20, y: 20, width: 180, height: 100) && delivered?.window === smartWindow,
+               "多屏智能选区点击在截图就绪后沿用当前窗口进入标注")
+        expect(cropped?.width == 90 && cropped?.height == 84, "智能窗口选区按实际截图比例裁剪像素")
+        source.requests[3].continuation.resume()
+        smartWindow.close(); capture.cancel()
+        capture.start()
+        while source.requests.count < 5 { await Task.yield() }
         let escapeWindow = capture.overlays[0]
         let escape = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                                       windowNumber: escapeWindow.windowNumber, context: nil, characters: "\u{1b}",
                                       charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!
         (escapeWindow.contentView as! SelectionView).keyDown(with: escape)
         expect(!capture.busy && capture.overlays.isEmpty, "截图准备时 Escape 可以立即取消")
-        source.requests[3].continuation.resume()
+        source.requests[4].continuation.resume()
         let failingSource = DeferredCaptureSource()
         let failing = CaptureCoordinator(source: failingSource, hasAccess: { true }, displays: { [right] })
         failing.onError = { errors.append($0) }
