@@ -27,6 +27,7 @@ final class CanvasView: NSView {
     private var redactions: RedactionRenderer
     var onToolKey: ((MarkTool) -> Void)?
     var onCancel: (() -> Void)?
+    var onConfirmCapture: (() -> Void)?
     var onSelectionChange: (() -> Void)?
     var selectedMark: Annotation? { marks.first { $0.id == selectedID } }
     var settingsTool: MarkTool { selectedMark?.tool ?? tool }
@@ -124,6 +125,12 @@ final class CanvasView: NSView {
         NSGraphicsContext.restoreGraphicsState()
     }
     override func mouseDown(with event: NSEvent) {
+        // Text and freehand tools use repeated clicks as editing input.
+        if event.clickCount == 2, tool != .text, tool != .pen,
+           !(tool.isRedaction && redactionMode == .brush), let onConfirmCapture {
+            onConfirmCapture()
+            return
+        }
         commitText()
         window?.makeFirstResponder(self)
         let p = point(event)

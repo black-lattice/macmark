@@ -30,6 +30,9 @@ extension Tests {
         let canvas = editor.canvas
         let view = window.contentView as! CaptureEditorView
         let toolbar = view.subviews.compactMap { $0 as? CaptureToolbarView }.first!
+        expect(canvas.tool == .select && toolbar.palette.isHidden && toolbar.frame.height == 40,
+               "截图默认选择模式，不预选箭头且收起绘图设置")
+        editor.choose(.arrow)
         view.layoutSubtreeIfNeeded()
         expect(editor.window === window && window.frame == originalFrame, "复用原截图窗口，不移动到主屏或居中")
         expect(canvas.frame == selection && canvas.scale == 1, "截图画布保持原选区位置及比例")
@@ -95,10 +98,38 @@ extension Tests {
         let clearPoint = CGPoint(x: toolbar.frame.minX + 8, y: toolbar.frame.minY + 70)
         expect(view.hitTest(clearPoint) === canvas, "设置面板旁的透明区域不阻挡画布操作")
         toolbar.frame = floatingFrame
-        func event(_ type: NSEvent.EventType, x: CGFloat, y: CGFloat) -> NSEvent {
+        func event(_ type: NSEvent.EventType, x: CGFloat, y: CGFloat, clicks: Int = 1) -> NSEvent {
             NSEvent.mouseEvent(with: type, location: canvas.convert(CGPoint(x: x, y: y), to: nil), modifierFlags: [], timestamp: 0,
-                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                              windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clicks, pressure: 1)!
         }
+        let confirmCapture = canvas.onConfirmCapture
+        expect(confirmCapture != nil, "原位截图接入双击确认操作")
+        expect(CanvasView(base: cropped, size: selection.size).onConfirmCapture == nil, "普通图片画布默认不接入截图确认")
+        var confirmations = 0
+        canvas.onConfirmCapture = { confirmations += 1 }
+        for tool in [MarkTool.select, .arrow, .line, .rectangle, .blur, .mosaic] {
+            editor.choose(tool)
+            let before = confirmations
+            canvas.mouseDown(with: event(.leftMouseDown, x: 50, y: 50))
+            canvas.mouseUp(with: event(.leftMouseUp, x: 50, y: 50))
+            expect(confirmations == before, "\(tool.title)单击不结束截图")
+            canvas.mouseDown(with: event(.leftMouseDown, x: 50, y: 50, clicks: 2))
+            canvas.mouseUp(with: event(.leftMouseUp, x: 50, y: 50, clicks: 2))
+            expect(confirmations == before + 1 && canvas.marks.isEmpty, "\(tool.title)双击仅确认一次且不新增标注")
+        }
+        for tool in [MarkTool.text, .pen, .blur, .mosaic] {
+            editor.choose(tool)
+            canvas.redactionMode = .brush
+            let before = confirmations
+            canvas.mouseDown(with: event(.leftMouseDown, x: 50, y: 50, clicks: 2))
+            canvas.mouseUp(with: event(.leftMouseUp, x: 50, y: 50, clicks: 2))
+            expect(confirmations == before, "\(tool.title)连续点击保留编辑行为")
+            canvas.commitText()
+            if !canvas.marks.isEmpty { canvas.undo() }
+        }
+        canvas.redactionMode = .region
+        canvas.onConfirmCapture = confirmCapture
+        editor.choose(.arrow)
         let blue = buttons.first { $0.toolTip == "蓝色" }!
         blue.performClick(nil)
         expect(canvas.markColor == .systemBlue && blue.state == .on, "颜色按钮切换标注颜色")
@@ -188,6 +219,7 @@ extension Tests {
         window.contentView = SelectionView(image: snapshot, size: size)
         let context = CaptureEditingContext(window: window, snapshot: snapshot, selection: selection)
         let editor = EditorController(image: snapshot.cropping(to: pixels)!, size: selection.size, captureContext: context)
+        editor.choose(.arrow)
         let view = window.contentView!
         view.layoutSubtreeIfNeeded()
         let toolbar = view.subviews.compactMap { $0 as? CaptureToolbarView }.first!

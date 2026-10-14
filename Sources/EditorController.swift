@@ -27,11 +27,14 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         super.init(window: window)
         window.delegate = self
+        if isCapture { canvas.tool = .select }
         buildUI(captureContext: captureContext)
         canvas.onToolKey = { [weak self] tool in self?.choose(tool) }
         canvas.onSelectionChange = { [weak self] in self?.captureToolbar?.selectionChanged(); self?.updateOptions() }
-        if isCapture { canvas.onCancel = { [weak self] in self?.close() } }
-        else { window.center() }
+        if isCapture {
+            canvas.onCancel = { [weak self] in self?.close() }
+            canvas.onConfirmCapture = { [weak self] in self?.copyImage() }
+        } else { window.center() }
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         if !isCapture { fit() }

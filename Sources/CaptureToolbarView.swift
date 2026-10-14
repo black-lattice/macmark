@@ -41,7 +41,7 @@ final class CaptureToolbarView: NSView {
         place(pin, at: &x)
         place(CaptureIconButton.make("保存 PNG", icon: .save, target: controller, action: #selector(EditorController.saveImage)), at: &x)
         let copy = CaptureIconButton.make("复制截图", icon: .copy, target: controller, action: #selector(EditorController.copyImage))
-        copy.toolTip = "复制截图并完成（⌘C）"
+        copy.toolTip = "复制截图并完成（⌘C，或双击选区；文字、画笔及涂抹模式除外）"
         copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = .command
         place(copy, at: &x)
         barWidth = x + 4

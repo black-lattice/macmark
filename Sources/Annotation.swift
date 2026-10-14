@@ -75,7 +75,10 @@ struct Annotation {
             let size = (text as NSString).size(withAttributes: textAttributes)
             return CGRect(origin: first, size: size)
         }
-        if tool == .arrow { return arrowPath.bounds }
+        if tool == .arrow {
+            let path = arrowPath
+            return path.isEmpty ? CGRect(origin: first, size: .zero) : path.bounds
+        }
         if isBrushRedaction { return redactionPath.bounds }
         return points.reduce(CGRect(origin: first, size: .zero)) { rect, point in
             CGRect(x: min(rect.minX, point.x), y: min(rect.minY, point.y),
