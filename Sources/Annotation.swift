@@ -5,7 +5,7 @@ enum RedactionMode: Int {
 }
 
 enum MarkTool: String, CaseIterable {
-    case select, arrow, line, pen, rectangle, text, blur, mosaic
+    case select, arrow, line, pen, rectangle, text, counter, blur, mosaic
     var isRedaction: Bool { self == .blur || self == .mosaic }
     var isRegion: Bool { self == .rectangle || isRedaction }
     var title: String {
@@ -16,6 +16,7 @@ enum MarkTool: String, CaseIterable {
         case .pen: return "画笔"
         case .rectangle: return "方框"
         case .text: return "文字"
+        case .counter: return "序号"
         case .blur: return "高斯模糊"
         case .mosaic: return "马赛克"
         }
@@ -28,6 +29,7 @@ enum MarkTool: String, CaseIterable {
         case .pen: return "p"
         case .rectangle: return "r"
         case .text: return "t"
+        case .counter: return "n"
         case .blur: return "b"
         case .mosaic: return "m"
         }
@@ -40,6 +42,7 @@ enum MarkTool: String, CaseIterable {
         case .pen: return "pencil.tip"
         case .rectangle: return "rectangle"
         case .text: return "textformat"
+        case .counter: return "1.circle"
         case .blur: return "drop.halffull"
         case .mosaic: return "square.grid.3x3.fill"
         }
@@ -71,6 +74,7 @@ struct Annotation {
     }
     var bounds: CGRect {
         guard let first = points.first else { return .zero }
+        if tool == .counter { return counterBounds }
         if tool == .text {
             let size = (text as NSString).size(withAttributes: textAttributes)
             return CGRect(origin: first, size: size)
@@ -145,6 +149,7 @@ struct Annotation {
     func contains(_ point: CGPoint) -> Bool {
         let tolerance = max(6, width * 2)
         if isBrushRedaction { return redactionPath.contains(point) }
+        if tool == .counter { return NSBezierPath(ovalIn: bounds).contains(point) }
         if tool == .text { return bounds.insetBy(dx: -4, dy: -4).contains(point) }
         guard let first = points.first, let last = points.last else { return false }
         if tool.isRedaction { return bounds.insetBy(dx: -tolerance, dy: -tolerance).contains(point) }

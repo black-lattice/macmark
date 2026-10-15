@@ -12,6 +12,7 @@ final class CanvasView: NSView {
     var redactionMode: RedactionMode = .region { didSet { selectedID = nil; needsDisplay = true; refreshCursor() } }
     var redactionBrushSize: CGFloat = 24 { didSet { refreshCursor() } }
     var textSize: CGFloat = 18
+    var counterSize: CGFloat = 24
     private var beforeStyleChange: [Annotation]?
     private let textInput = CanvasTextInput()
     private let brushPreview = BrushCursorPreview()
@@ -43,7 +44,7 @@ final class CanvasView: NSView {
         super.init(frame: CGRect(origin: .zero, size: size))
         clipsToBounds = true
         brushPreview.frame = bounds; brushPreview.autoresizingMask = [.width, .height]; addSubview(brushPreview)
-        setAccessibilityLabel("截图标注画布。A 箭头，L 直线，P 画笔，R 方框，T 文字，B 高斯模糊，M 马赛克，V 选择。")
+        setAccessibilityLabel("截图标注画布。A 箭头，L 直线，P 画笔，R 方框，T 文字，N 序号，B 高斯模糊，M 马赛克，V 选择。")
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     private var defaultCursor: NSCursor {
@@ -126,7 +127,7 @@ final class CanvasView: NSView {
     }
     override func mouseDown(with event: NSEvent) {
         // Text and freehand tools use repeated clicks as editing input.
-        if event.clickCount == 2, tool != .text, tool != .pen,
+        if event.clickCount == 2, tool != .text, tool != .pen, tool != .counter,
            !(tool.isRedaction && redactionMode == .brush), let onConfirmCapture {
             onConfirmCapture()
             return
@@ -143,7 +144,14 @@ final class CanvasView: NSView {
             beforeMove = marks
         } else {
             selectedID = nil
-            if tool == .text { textInput.begin(on: self, at: p) }
+            if tool == .counter {
+                let old = marks
+                let number = (marks.filter { $0.tool == .counter }.compactMap { Int($0.text) }.max() ?? 0) + 1
+                marks.append(Annotation(tool: .counter, points: [p], color: markColor, width: markWidth,
+                                        text: String(number), fontSize: counterSize))
+                record(old)
+            }
+            else if tool == .text { textInput.begin(on: self, at: p) }
             else if tool != .select {
                 let brush = tool.isRedaction && redactionMode == .brush
                 pending = Annotation(tool: tool, points: brush ? [p] : [p, p], color: markColor,
@@ -243,8 +251,9 @@ final class CanvasView: NSView {
         changeSelectedStyle { if !$0.tool.isRedaction && $0.tool != .text { $0.width = width } }
     }
     func setTextSize(_ size: CGFloat) {
-        textSize = size; textInput.updateFont(size: size, scale: scale)
-        changeSelectedStyle { if $0.tool == .text { $0.fontSize = size } }
+        if settingsTool == .counter { counterSize = size }
+        else { textSize = size; textInput.updateFont(size: size, scale: scale) }
+        changeSelectedStyle { if $0.tool == .text || $0.tool == .counter { $0.fontSize = size } }
     }
     func setRedactionStrength(_ strength: CGFloat) {
         redactionStrength = strength

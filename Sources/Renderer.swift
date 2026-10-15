@@ -6,6 +6,7 @@ enum Renderer {
         guard let first = mark.points.first, let last = mark.points.last else { return }
         mark.color.setStroke()
         mark.color.setFill()
+        if mark.tool == .counter { mark.drawCounter(); return }
         if mark.tool == .text {
             (mark.text as NSString).draw(at: first, withAttributes: mark.textAttributes)
             return

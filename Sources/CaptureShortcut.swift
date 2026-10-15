@@ -6,6 +6,8 @@ struct CaptureShortcut: Equatable {
     let modifiers: NSEvent.ModifierFlags
     let keyEquivalent: String
     static let storageKey = "captureShortcut"
+    static let textStorageKey = "textCaptureShortcut"
+    static let textDefaultValue = CaptureShortcut(keyCode: UInt32(kVK_ANSI_O), modifiers: [.command, .shift], keyEquivalent: "o")
     static let modifierMask: NSEvent.ModifierFlags = [.control, .option, .shift, .command]
     static let defaultValue = CaptureShortcut(keyCode: UInt32(kVK_ANSI_X), modifiers: [.command, .shift], keyEquivalent: "x")
     private static let functionCodes = [kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10,
@@ -58,15 +60,16 @@ struct CaptureShortcut: Equatable {
         if modifiers.contains(.control) { value |= UInt32(controlKey) }
         return value
     }
-    static func load(from defaults: UserDefaults = .standard) -> CaptureShortcut {
+    static func load(from defaults: UserDefaults = .standard, key storageKey: String = storageKey,
+                     fallback: CaptureShortcut = .defaultValue) -> CaptureShortcut {
         guard let stored = defaults.dictionary(forKey: storageKey), let code = stored["keyCode"] as? Int,
               (0...127).contains(code), let flags = stored["modifiers"] as? UInt,
-              let key = stored["keyEquivalent"] as? String else { return .defaultValue }
+              let key = stored["keyEquivalent"] as? String else { return fallback }
         let shortcut = CaptureShortcut(keyCode: UInt32(code), modifiers: NSEvent.ModifierFlags(rawValue: flags), keyEquivalent: key)
-        return shortcut.isValid ? shortcut : .defaultValue
+        return shortcut.isValid ? shortcut : fallback
     }
-    func save(to defaults: UserDefaults = .standard) {
-        defaults.set(["keyCode": Int(keyCode), "modifiers": modifiers.rawValue, "keyEquivalent": keyEquivalent], forKey: Self.storageKey)
+    func save(to defaults: UserDefaults = .standard, key: String = storageKey) {
+        defaults.set(["keyCode": Int(keyCode), "modifiers": modifiers.rawValue, "keyEquivalent": keyEquivalent], forKey: key)
     }
     func conflictingMenuTitle(in menu: NSMenu?) -> String? {
         for item in menu?.items ?? [] {

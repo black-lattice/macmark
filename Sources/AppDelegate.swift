@@ -2,9 +2,17 @@ import AppKit
 import ServiceManagement
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var shortcut: HotKey?
+    private var textShortcut: HotKey?
+    private var textCaptureShortcut = CaptureShortcut.load(key: CaptureShortcut.textStorageKey, fallback: .textDefaultValue)
+    private var textCaptureItem: NSMenuItem!
+    private var pinnedVisibilityItem: NSMenuItem!
+    private var isTextCapture = false
+    private let textCapture = TextCaptureController()
+    private let screenshotHistory = ScreenshotHistory()
+    private var historyWindow: HistoryWindowController?
     private var captureShortcut = CaptureShortcut.load()
     private var captureItem: NSMenuItem!
     private var shortcutSettings: ShortcutSettingsController?
@@ -21,8 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.button?.image = NSImage(systemSymbolName: "viewfinder", accessibilityDescription: "轻截 MacMark")
         let menu = NSMenu()
+        menu.delegate = self
         captureItem = add("区域截图", action: #selector(takeScreenshot), to: menu)
         add("截图快捷键…", action: #selector(configureShortcut), to: menu)
+        textCaptureItem = add("提取文字", action: #selector(takeTextScreenshot), to: menu)
+        add("文字提取快捷键…", action: #selector(configureTextShortcut), to: menu)
+        add("最近截图…", action: #selector(showHistory), to: menu)
+        pinnedVisibilityItem = add("隐藏全部贴图", action: #selector(togglePinnedVisibility), to: menu)
         updateShortcutDisplay()
         add("打开图片…", action: #selector(openImage), to: menu)
         menu.addItem(.separator())
@@ -34,11 +47,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         add("退出轻截", action: #selector(quit), to: menu, key: "q")
         statusItem.menu = menu
-        capture.onCapture = { [weak self] image, size, context in self?.showEditor(image, size: size, captureContext: context) }
+        capture.onCapture = { [weak self] image, size, context in
+            guard let self else { return }
+            if self.isTextCapture {
+                context.window.orderOut(nil); context.window.close(); self.capture.cancel()
+                self.textCapture.recognize(image)
+            } else { self.showEditor(image, size: size, captureContext: context) }
+        }
         capture.onError = { [weak self] message in self?.alert(message) }
         capture.prepare()
         shortcut = HotKey { [weak self] in self?.takeScreenshot() }
         if shortcut?.register(captureShortcut) != true { showShortcutError() }
+        textShortcut = HotKey { [weak self] in self?.takeTextScreenshot() }
+        if textShortcut?.register(textCaptureShortcut) != true { alert("文字提取快捷键注册失败，请在菜单栏更换快捷键。") }
         if !UserDefaults.standard.bool(forKey: "didShowWelcome") {
             UserDefaults.standard.set(true, forKey: "didShowWelcome")
             showHelp()
@@ -49,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: "轻截")
         add("截图快捷键…", action: #selector(configureShortcut), to: appMenu)
+        add("文字提取快捷键…", action: #selector(configureTextShortcut), to: appMenu)
         add("退出轻截", action: #selector(quit), to: appMenu, key: "q")
         appItem.submenu = appMenu; root.addItem(appItem)
         let fileItem = NSMenuItem(title: "文件", action: nil, keyEquivalent: "")
@@ -77,36 +99,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
     private var current: EditorController? { editors.first { $0.window === NSApp.keyWindow } }
-    @objc private func takeScreenshot() {
+    @objc private func takeScreenshot() { startCapture(textOnly: false) }
+    @objc private func takeTextScreenshot() { startCapture(textOnly: true) }
+    private func startCapture(textOnly: Bool) {
         if let shortcutSettings { shortcutSettings.window?.makeKeyAndOrderFront(nil); return }
+        guard !capture.busy else { return }
+        textCapture.cancel(); isTextCapture = textOnly
         capture.start()
     }
     private func updateShortcutDisplay() {
         statusItem.button?.toolTip = "轻截 · \(captureShortcut.display) 截图"
         captureItem.keyEquivalent = captureShortcut.keyEquivalent
         captureItem.keyEquivalentModifierMask = captureShortcut.modifiers
+        textCaptureItem.keyEquivalent = textCaptureShortcut.keyEquivalent
+        textCaptureItem.keyEquivalentModifierMask = textCaptureShortcut.modifiers
     }
     private func showShortcutError() {
         alert("\(captureShortcut.display) 快捷键注册失败，可能被其他应用占用。可在菜单栏「截图快捷键…」中更换，或使用「区域截图」。")
     }
-    @objc private func configureShortcut() {
+    @objc private func configureShortcut() { showShortcutSettings(textOnly: false) }
+    @objc private func configureTextShortcut() { showShortcutSettings(textOnly: true) }
+    private func showShortcutSettings(textOnly: Bool) {
         if let shortcutSettings {
             shortcutSettings.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return
         }
         // The old global shortcut must be released so its keys can be recorded too.
-        shortcut?.unregister()
-        let settings = ShortcutSettingsController(shortcut: captureShortcut)
+        shortcut?.unregister(); textShortcut?.unregister()
+        let settings = ShortcutSettingsController(shortcut: textOnly ? textCaptureShortcut : captureShortcut,
+            purpose: textOnly ? "提取文字" : "区域截图", defaultShortcut: textOnly ? .textDefaultValue : .defaultValue)
         shortcutSettings = settings
         settings.onApply = { [weak self] value in
             guard let self else { return "无法保存快捷键，请重新打开设置。" }
             if let title = value.conflictingMenuTitle(in: NSApp.mainMenu) {
                 return "该组合键已用于「\(title)」，请选择其他组合。"
             }
-            guard self.shortcut?.register(value) == true else { return "快捷键被占用或无法注册，请选择其他组合。" }
-            self.captureShortcut = value
-            value.save()
+            let other = textOnly ? self.captureShortcut : self.textCaptureShortcut
+            guard value.keyCode != other.keyCode || value.modifiers != other.modifiers else { return "截图与文字提取不能使用相同快捷键。" }
+            let hotKey = textOnly ? self.textShortcut : self.shortcut
+            guard hotKey?.register(value) == true else { return "快捷键被占用或无法注册，请选择其他组合。" }
+            if textOnly { self.textCaptureShortcut = value } else { self.captureShortcut = value }
+            value.save(key: textOnly ? CaptureShortcut.textStorageKey : CaptureShortcut.storageKey)
             self.updateShortcutDisplay()
             return nil
         }
@@ -114,13 +148,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.shortcutSettings = nil
             if self.shortcut?.register(self.captureShortcut) != true { self.showShortcutError() }
+            if self.textShortcut?.register(self.textCaptureShortcut) != true { self.alert("文字提取快捷键注册失败，请更换快捷键。") }
         }
     }
-    @objc private func saveCurrent() { current?.saveImage() }
-    @objc private func closeCurrent() { current?.close() }
+    @objc private func saveCurrent() {
+        if let pinned = NSApp.keyWindow?.windowController as? PinnedScreenshotController { pinned.saveScreenshot(nil) }
+        else if let history = NSApp.keyWindow?.windowController as? HistoryWindowController { history.saveSelected() }
+        else { current?.saveImage() }
+    }
+    @objc private func closeCurrent() { NSApp.keyWindow?.windowController?.close() }
     @objc private func copyCurrent() {
         if let pinned = NSApp.keyWindow?.windowController as? PinnedScreenshotController { pinned.copySelectedText() }
         else if NSApp.keyWindow?.firstResponder is NSTextView { NSApp.sendAction(#selector(NSText.copy(_:)), to: nil, from: nil) }
+        else if let history = NSApp.keyWindow?.windowController as? HistoryWindowController { history.copySelected() }
         else { current?.copyImage() }
     }
     @objc private func undoCurrent() {
@@ -148,10 +188,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editor.onPin = { [weak self] image, size, frame in
             self?.pinnedScreenshots.pin(image: image, size: size, preferredFrame: frame)
         }
+        editor.onExport = { [weak self] image, png in
+            do { try self?.screenshotHistory.add(image, png: png) }
+            catch {
+                DispatchQueue.main.async { [weak self] in self?.alert("截图已完成，但记录历史失败：\(error.localizedDescription)") }
+            }
+        }
         editor.onClose = { [weak self, weak editor] in
             self?.editors.removeAll { $0 === editor }
             if captureContext != nil { self?.capture.cancel() }
         }
+    }
+    @objc private func showHistory() {
+        if historyWindow == nil {
+            let controller = HistoryWindowController(history: screenshotHistory)
+            controller.onOpen = { [weak self] image in
+                self?.showEditor(image, size: CGSize(width: image.width, height: image.height))
+            }
+            historyWindow = controller
+        }
+        historyWindow?.present()
+    }
+    @objc private func togglePinnedVisibility() { pinnedScreenshots.toggleVisibility() }
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        pinnedVisibilityItem.title = pinnedScreenshots.isHidden ? "恢复全部贴图" : "隐藏全部贴图"
+        pinnedVisibilityItem.isEnabled = !pinnedScreenshots.screenshots.isEmpty
     }
     @objc private func toggleLogin() {
         do {
@@ -168,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.open(URL(string: "https://github.com/black-lattice/macmark/releases/latest")!)
     }
     @objc private func showHelp() {
-        alert("轻截已在菜单栏待命。按 \(captureShortcut.display) 或点击菜单栏「区域截图」，拖动框选，松开后直接在原位置标注，工具栏显示在选区旁，可拖动空白处移动。Esc 或右键取消。菜单栏「截图快捷键…」可自定义组合键。\n\n工具：A 箭头、L 直线、P 画笔、R 方框、T 文字、V 选择。按住 Shift 画横线、竖线或正方形。选择后可拖动标注，Delete 删除，⌘Z 撤销。\n\n⌘C 复制，⌘S 保存 PNG；成功后结束本次截图。打开本地图片仍使用独立编辑器。图片只在本地处理。首次截图需要屏幕录制权限。")
+        alert("轻截已在菜单栏待命。按 \(captureShortcut.display) 或点击菜单栏「区域截图」，拖动框选，松开后直接在原位置标注，工具栏显示在选区旁，可拖动空白处移动。Esc 或右键取消。菜单栏「截图快捷键…」可自定义组合键。\n\n工具：A 箭头、L 直线、P 画笔、R 方框、T 文字、N 序号、V 选择。按住 Shift 画横线、竖线或正方形。选择后可拖动标注，Delete 删除，⌘Z 撤销。\n\n⌘C 复制，⌘S 保存 PNG；成功后结束本次截图。打开本地图片仍使用独立编辑器。按 \(textCaptureShortcut.display) 框选后直接复制文字。贴图右键可缩放、调整不透明度、复制和保存；菜单栏可隐藏或恢复全部贴图。\n\n「最近截图」默认在本机保留最近 20 张已复制、保存或锚定的图片，可关闭记录或清空。图片只在本地处理。首次截图需要屏幕录制权限。")
     }
     private func alert(_ message: String) {
         NSApp.activate(ignoringOtherApps: true)

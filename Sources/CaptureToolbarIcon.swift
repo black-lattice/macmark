@@ -2,7 +2,7 @@ import AppKit
 
 // A shared 20-point grid and rounded strokes keep all capture actions visually consistent.
 enum CaptureToolbarIcon {
-    case rectangle, line, arrow, pen, text, blur, mosaic, select, undo, redo, cancel, pin, save, copy
+    case rectangle, line, arrow, pen, text, counter, blur, mosaic, select, undo, redo, cancel, pin, save, copy
     static func forTool(_ tool: MarkTool) -> CaptureToolbarIcon {
         switch tool {
         case .rectangle: return .rectangle
@@ -10,6 +10,7 @@ enum CaptureToolbarIcon {
         case .arrow: return .arrow
         case .pen: return .pen
         case .text: return .text
+        case .counter: return .counter
         case .select: return .select
         case .blur: return .blur
         case .mosaic: return .mosaic
@@ -39,6 +40,10 @@ enum CaptureToolbarIcon {
                 points([(4, 16), (16, 16)])
                 points([(10, 16), (10, 4)])
                 points([(7, 4), (13, 4)])
+            case .counter:
+                path.appendOval(in: CGRect(x: 2, y: 2, width: 16, height: 16))
+                points([(8, 12), (10, 14), (10, 6)])
+                points([(7, 6), (13, 6)])
             case .select:
                 points([(4, 17), (4, 3), (8, 7), (12, 2), (15, 4), (11, 9), (17, 9), (4, 17)])
             case .blur:

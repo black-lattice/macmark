@@ -22,7 +22,7 @@ final class CaptureToolbarView: NSView {
         addSubview(bar); addSubview(palette)
         bar.toolTip = "拖动工具栏空白处可移动位置"
         var x: CGFloat = 18
-        for tool in [MarkTool.rectangle, .line, .arrow, .pen, .text, .blur, .mosaic, .select] {
+        for tool in [MarkTool.rectangle, .line, .arrow, .pen, .text, .counter, .blur, .mosaic, .select] {
             let button = CaptureIconButton.make(tool.title, icon: .forTool(tool), target: self, action: #selector(toolClicked(_:)), toggle: true)
             button.identifier = NSUserInterfaceItemIdentifier(tool.rawValue)
             button.toolTip = "\(tool.title)（\(tool.key.uppercased())）"
@@ -41,7 +41,7 @@ final class CaptureToolbarView: NSView {
         place(pin, at: &x)
         place(CaptureIconButton.make("保存 PNG", icon: .save, target: controller, action: #selector(EditorController.saveImage)), at: &x)
         let copy = CaptureIconButton.make("复制截图", icon: .copy, target: controller, action: #selector(EditorController.copyImage))
-        copy.toolTip = "复制截图并完成（⌘C，或双击选区；文字、画笔及涂抹模式除外）"
+        copy.toolTip = "复制截图并完成（⌘C，或双击选区；文字、序号、画笔及涂抹模式除外）"
         copy.keyEquivalent = "c"; copy.keyEquivalentModifierMask = .command
         place(copy, at: &x)
         barWidth = x + 4

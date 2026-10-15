@@ -2,15 +2,19 @@ import AppKit
 
 final class ShortcutSettingsController: NSWindowController, NSWindowDelegate {
     let recorder: ShortcutRecorder
+    private let defaultShortcut: CaptureShortcut
+    private let purpose: String
     private let message = NSTextField(wrappingLabelWithString: "组合键需包含 ⌘、⌥ 或 ⌃；也可单独使用 F1–F20。")
     private var eventMonitor: Any?
     var onApply: ((CaptureShortcut) -> String?)?
     var onClose: (() -> Void)?
-    init(shortcut: CaptureShortcut) {
+    init(shortcut: CaptureShortcut, purpose: String = "区域截图", defaultShortcut: CaptureShortcut = .defaultValue) {
+        self.purpose = purpose; self.defaultShortcut = defaultShortcut
         recorder = ShortcutRecorder(shortcut: shortcut)
+        recorder.setAccessibilityLabel("\(purpose)快捷键，点击后按下新的组合键")
         let window = ShortcutSettingsWindow(contentRect: CGRect(x: 0, y: 0, width: 460, height: 240),
                                             styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "截图快捷键"
+        window.title = "\(purpose)快捷键"
         window.isReleasedWhenClosed = false
         window.contentView = ShortcutSettingsBackgroundView()
         super.init(window: window)
@@ -36,7 +40,7 @@ final class ShortcutSettingsController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     private func buildUI() {
         guard let content = window?.contentView else { return }
-        let title = NSTextField(labelWithString: "设置触发区域截图的快捷键")
+        let title = NSTextField(labelWithString: "设置触发\(purpose)的快捷键")
         title.font = .systemFont(ofSize: 16, weight: .semibold)
         let hint = NSTextField(labelWithString: "点击下方按钮，再按下新的组合键。")
         hint.textColor = .secondaryLabelColor
@@ -71,7 +75,7 @@ final class ShortcutSettingsController: NSWindowController, NSWindowDelegate {
         content.layoutSubtreeIfNeeded()
     }
     @objc private func resetShortcut() {
-        recorder.setShortcut(.defaultValue)
+        recorder.setShortcut(defaultShortcut)
         message.stringValue = "已选择默认快捷键，点击保存后生效。"
         message.textColor = .secondaryLabelColor
     }

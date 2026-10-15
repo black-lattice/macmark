@@ -25,6 +25,24 @@ extension Tests {
         second.window?.orderOut(nil)
         expect(!ScreenSnapshotSource.pinnedWindowIDs().contains(CGWindowID(second.window!.windowNumber)), "隐藏的锚定窗口不会进入截图过滤例外")
         second.window?.orderFrontRegardless()
+        let originalFrame = panel.frame
+        first.setScale(0.5)
+        expect(panel.frame.width == originalFrame.width / 2 && panel.frame.height == originalFrame.height / 2,
+               "贴图缩放保持宽高比例")
+        first.setScale(100)
+        expect(panel.screen!.visibleFrame.contains(panel.frame), "贴图放大限制在当前屏幕内")
+        first.setScale(1)
+        let opacity = NSMenuItem(); opacity.tag = 50; first.changeOpacity(opacity)
+        expect(panel.alphaValue == 0.5, "贴图不透明度可调")
+        first.copyScreenshot(nil)
+        expect(NSBitmapImageRep(data: NSPasteboard.general.data(forType: .png)!)?.pixelsWide == base.width,
+               "缩放和透明度不改变复制图片的原始像素")
+        opacity.tag = 100; first.changeOpacity(opacity)
+        manager.toggleVisibility()
+        expect(manager.isHidden && manager.screenshots.allSatisfy { $0.window?.isVisible == false }, "一键隐藏全部贴图")
+        manager.toggleVisibility()
+        expect(!manager.isHidden && manager.screenshots.allSatisfy { $0.window?.isVisible == true }, "一键恢复全部贴图")
+        panel.setFrame(originalFrame, display: true)
         let view = panel.contentView!
         func preview(_ name: NSAppearance.Name) -> NSBitmapImageRep {
             let appearance = NSAppearance(named: name)!

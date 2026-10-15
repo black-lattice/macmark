@@ -13,6 +13,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
     private var zoom: CGFloat = 1
     private let isCapture: Bool
     private var captureToolbar: CaptureToolbarView?
+    var onExport: ((CGImage, Data?) -> Void)?
     var onClose: (() -> Void)?
     var onPin: ((CGImage, CGSize, CGRect) -> Void)?
     init(image: CGImage, size: CGSize, captureContext: CaptureEditingContext? = nil) {
@@ -208,6 +209,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         NSPasteboard.general.clearContents()
         if NSPasteboard.general.setData(png, forType: .png) {
             if isCapture { close() } else { window?.title = "轻截 · 已复制截图" }
+            onExport?(image, png)
         } else { showError("无法写入剪贴板，请重试") }
     }
     @objc func pinImage() {
@@ -216,6 +218,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
         let frame = window.convertToScreen(canvas.convert(canvas.bounds, to: nil))
         onPin(image, canvas.logicalSize, frame)
         if isCapture { close() }
+        onExport?(image, nil)
     }
     @objc func saveImage() {
         canvas.commitText()
@@ -232,6 +235,7 @@ final class EditorController: NSWindowController, NSWindowDelegate {
                 guard let image = self.canvas.renderedImage(), let data = Renderer.png(image) else { throw ExportError.failed }
                 try data.write(to: url, options: .atomic)
                 if self.isCapture { self.close() } else { self.window?.title = "轻截 · 已保存截图" }
+                self.onExport?(image, data)
             } catch { self.showError("保存失败：\(error.localizedDescription)") }
         }
     }

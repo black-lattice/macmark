@@ -32,8 +32,8 @@ final class AnnotationSizeSlider: NSView {
         let tool = canvas.settingsTool
         let mark = canvas.selectedMark
         if tool.isRedaction { configure(title: "强度", value: mark?.width ?? canvas.redactionStrength, range: 1...10) }
-        else if tool == .text {
-            let size = (mark?.textAttributes[.font] as? NSFont)?.pointSize ?? canvas.textSize
+        else if tool == .text || tool == .counter {
+            let size = (mark?.textAttributes[.font] as? NSFont)?.pointSize ?? (tool == .counter ? canvas.counterSize : canvas.textSize)
             configure(title: "字号", value: size, range: 8...96, step: 1)
         } else { configure(title: "粗细", value: mark?.width ?? canvas.markWidth, range: 0.5...20) }
     }
@@ -43,7 +43,7 @@ final class AnnotationSizeSlider: NSView {
         onChange = { [weak canvas] value in
             guard let canvas else { return }
             if canvas.settingsTool.isRedaction { canvas.setRedactionStrength(value) }
-            else if canvas.settingsTool == .text { canvas.setTextSize(value) }
+            else if canvas.settingsTool == .text || canvas.settingsTool == .counter { canvas.setTextSize(value) }
             else { canvas.setMarkWidth(value) }
             canvas.restoreEditingFocus()
         }

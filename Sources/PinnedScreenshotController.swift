@@ -1,35 +1,13 @@
 import AppKit
 import VisionKit
 
-final class PinnedScreenshotManager {
-    private(set) var screenshots: [PinnedScreenshotController] = []
-    @discardableResult func pin(image: CGImage, size: CGSize, preferredFrame: CGRect) -> PinnedScreenshotController {
-        let center = CGPoint(x: preferredFrame.midX, y: preferredFrame.midY)
-        let screen = NSScreen.screens.first { $0.frame.contains(center) } ?? NSScreen.main
-        let bounds = screen?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1200, height: 800)
-        let frame = Self.placement(size: size, preferredFrame: preferredFrame, within: bounds)
-        let screenshot = PinnedScreenshotController(image: image, frame: frame)
-        screenshots.append(screenshot)
-        screenshot.onClose = { [weak self, weak screenshot] in
-            self?.screenshots.removeAll { $0 === screenshot }
-        }
-        screenshot.window?.orderFrontRegardless()
-        return screenshot
-    }
-    static func placement(size: CGSize, preferredFrame: CGRect, within bounds: CGRect) -> CGRect {
-        guard size.width > 0, size.height > 0, bounds.width > 0, bounds.height > 0 else { return .zero }
-        let scale = min(1, min(bounds.width / size.width, bounds.height / size.height))
-        let width = size.width * scale, height = size.height * scale
-        return CGRect(x: max(bounds.minX, min(preferredFrame.minX, bounds.maxX - width)),
-                      y: max(bounds.minY, min(preferredFrame.maxY - height, bounds.maxY - height)), width: width, height: height)
-    }
-}
-
 final class PinnedScreenshotController: NSWindowController, NSWindowDelegate {
     let image: CGImage
+    let originalSize: CGSize
     var onClose: (() -> Void)?
     init(image: CGImage, frame: CGRect, recognizer: PinnedTextRecognizing? = nil) {
         self.image = image
+        originalSize = frame.size
         let panel = PinnedScreenshotWindow(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "轻截 · 锚定截图"
         panel.level = .floating
@@ -49,7 +27,10 @@ final class PinnedScreenshotController: NSWindowController, NSWindowDelegate {
         view.startRecognition()
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    func copySelectedText() { (window?.contentView as? PinnedScreenshotView)?.copySelectedText(nil) }
+    func copySelectedText() {
+        guard let view = window?.contentView as? PinnedScreenshotView else { return }
+        if view.selectedText.isEmpty { copyScreenshot(nil) } else { view.copySelectedText(nil) }
+    }
     func windowWillClose(_ notification: Notification) {
         (window?.contentView as? PinnedScreenshotView)?.stopRecognition()
         onClose?()
@@ -59,6 +40,9 @@ final class PinnedScreenshotController: NSWindowController, NSWindowDelegate {
 final class PinnedScreenshotWindow: NSPanel {
     override var canBecomeKey: Bool { true }
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .magnify, let controller = windowController as? PinnedScreenshotController {
+            controller.resize(by: max(0.1, 1 + event.magnification)); return
+        }
         if event.type == .leftMouseDown, let view = contentView as? PinnedScreenshotView {
             let point = view.convert(event.locationInWindow, from: nil)
             // A nonactivating panel must receive keyboard focus before Live Text handles its first click.
@@ -69,8 +53,8 @@ final class PinnedScreenshotWindow: NSPanel {
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
            event.charactersIgnoringModifiers?.lowercased() == "c",
-           let view = contentView as? PinnedScreenshotView, !view.selectedText.isEmpty {
-            view.copySelectedText(nil)
+           let controller = windowController as? PinnedScreenshotController {
+            controller.copySelectedText()
             return true
         }
         return super.performKeyEquivalent(with: event)
@@ -176,6 +160,7 @@ final class PinnedScreenshotView: NSView, ImageAnalysisOverlayViewDelegate, NSMe
         return menu
     }
     private func appendScreenshotActions(to menu: NSMenu) {
+        (window?.windowController as? PinnedScreenshotController)?.appendImageActions(to: menu)
         let copyAll = NSMenuItem(title: "复制全部文字", action: #selector(copyAllText(_:)), keyEquivalent: "")
         copyAll.target = self
         copyAll.isEnabled = !recognizedText.isEmpty
