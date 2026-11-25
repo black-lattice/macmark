@@ -37,6 +37,10 @@ MacMark 是专用于 Mac 的轻量截图、标注与文字提取工具。通过�
 2. 将 MacMark 拖入「应用程序」并打开，应用会常驻菜单栏。
 3. 首次截图时，在系统设置中允许屏幕录制，授权后退出并重新打开应用。
 
+从 0.2.1 起，可在菜单栏选择「检查更新…」，或允许 Sparkle 定期检查。从 0.2.0 及更早版本升级需先手动安装一次。
+
+发布新版本时，请递增 Resources/Info.plist 中的版本号和构建号。标签构建使用 GitHub Actions Secret `SPARKLE_PRIVATE_KEY` 签名。对应私钥保存在 macOS 钥匙串账户 `io.github.black-lattice.macmark`。
+
 未经过 Apple 公证的安装包可能出现安全提示。确认来源后，可在「系统设置 → 隐私与安全性」中允许打开。更多安装说明见 [INSTALL.txt](INSTALL.txt)。
 
 ## 开始使用

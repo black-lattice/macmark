@@ -37,6 +37,8 @@ The in-place editor provides a selection border, floating toolbar, and color con
 2. Drag MacMark into Applications and open it. The app lives in the menu bar.
 3. Allow Screen Recording in System Settings when capturing for the first time, then quit and reopen the app.
 
+Starting with 0.2.1, choose “检查更新…” in the menu bar or allow Sparkle to check periodically. Install manually once when upgrading from 0.2.0 or earlier.
+
 macOS may show a security prompt for builds without Apple notarization. After verifying the source, allow the app in System Settings → Privacy & Security. See [INSTALL.txt](INSTALL.txt) for additional installation instructions (in Chinese).
 
 ## Get started

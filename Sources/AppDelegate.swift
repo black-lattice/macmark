@@ -1,8 +1,11 @@
 import AppKit
 import ServiceManagement
+import Sparkle
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private var updater: SPUStandardUpdaterController?
+    private var updateItem: NSMenuItem?
     private var statusItem: NSStatusItem!
     private var shortcut: HotKey?
     private var textShortcut: HotKey?
@@ -43,7 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
         add("屏幕录制权限…", action: #selector(openPermissions), to: menu)
         add("使用说明", action: #selector(showHelp), to: menu)
-        add("检查新版本", action: #selector(openReleases), to: menu)
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            let controller = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: self)
+            updater = controller
+            let check = menu.addItem(withTitle: "检查更新…", action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+            check.target = controller
+            updateItem = check
+        }
         menu.addItem(.separator())
         add("退出轻截", action: #selector(quit), to: menu, key: "q")
         statusItem.menu = menu
@@ -225,9 +234,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openPermissions() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
     }
-    @objc private func openReleases() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/black-lattice/macmark/releases/latest")!)
-    }
     @objc private func showHelp() {
         alert("轻截已在菜单栏待命。按 \(captureShortcut.display) 或点击菜单栏「区域截图」，拖动框选，松开后直接在原位置标注，工具栏显示在选区旁，可拖动空白处移动。Esc 或右键取消。菜单栏「截图快捷键…」可自定义组合键。\n\n工具：A 箭头、L 直线、P 画笔、R 方框、T 文字、N 序号、V 选择。按住 Shift 画横线、竖线或正方形。选择后可拖动标注，Delete 删除，⌘Z 撤销。\n\n⌘C 复制，⌘S 保存 PNG；成功后结束本次截图。打开本地图片仍使用独立编辑器。按 \(textCaptureShortcut.display) 框选后直接复制文字。贴图右键可缩放、调整不透明度、复制和保存；菜单栏可隐藏或恢复全部贴图。\n\n「最近截图」默认在本机保留最近 20 张已复制、保存或锚定的图片，可关闭记录或清空。图片只在本地处理。首次截图需要屏幕录制权限。")
     }
@@ -238,4 +244,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+}
+
+extension AppDelegate: SPUStandardUserDriverDelegate {
+    nonisolated var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    nonisolated func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
+        if !state.userInitiated {
+            let title = "更新到 " + update.displayVersionString + "…"
+            DispatchQueue.main.async { self.updateItem?.title = title }
+        }
+    }
+
+    nonisolated func standardUserDriverWillFinishUpdateSession() {
+        DispatchQueue.main.async { self.updateItem?.title = "检查更新…" }
+    }
 }
