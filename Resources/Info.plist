@@ -6,9 +6,11 @@
 <key>CFBundleIdentifier</key><string>io.github.black-lattice.macmark</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleExecutable</key><string>MacMark</string>
+<key>CFBundleDevelopmentRegion</key><string>zh-Hans</string>
+<key>CFBundleLocalizations</key><array><string>zh-Hans</string></array>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.2.1</string>
-<key>CFBundleVersion</key><string>26</string>
+<key>CFBundleShortVersionString</key><string>0.2.2</string>
+<key>CFBundleVersion</key><string>27</string>
 <key>SUFeedURL</key><string>https://github.com/black-lattice/macmark/releases/latest/download/appcast.xml</string>
 <key>SUPublicEDKey</key><string>qfyW3O1XbuZlbaTFun+C9TyAMESJf6cV4O3XrCOYPk4=</string>
 <key>SURequireSignedFeed</key><true/>
